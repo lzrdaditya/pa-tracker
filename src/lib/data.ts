@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { monthRange } from "@/lib/pa";
+import { monthBounds } from "@/lib/pa";
 
 export interface Unit {
   id: string;
@@ -9,11 +9,11 @@ export interface Unit {
   notes: string | null;
 }
 
-export interface DowntimeLog {
+export interface Breakdown {
   id: string;
   unit_id: string;
-  log_date: string;
-  downtime_hours: number;
+  started_at: string;
+  finished_at: string | null;
   notes: string | null;
 }
 
@@ -52,69 +52,84 @@ export function useSettings() {
   });
 }
 
-export function useMonthLogs() {
-  const { start, end } = monthRange();
+/** All breakdowns overlapping the current month (open OR finished this month). */
+export function useMonthBreakdowns() {
+  const { start, end } = monthBounds();
   return useQuery({
-    queryKey: ["logs", "month", start, end],
-    queryFn: async (): Promise<DowntimeLog[]> => {
+    queryKey: ["breakdowns", "month", start.toISOString()],
+    queryFn: async (): Promise<Breakdown[]> => {
+      // overlap: started_at < monthEnd AND (finished_at IS NULL OR finished_at >= monthStart)
       const { data, error } = await supabase
-        .from("downtime_logs")
-        .select("id,unit_id,log_date,downtime_hours,notes")
-        .gte("log_date", start)
-        .lte("log_date", end);
+        .from("breakdowns")
+        .select("id,unit_id,started_at,finished_at,notes")
+        .lt("started_at", end.toISOString())
+        .or(`finished_at.is.null,finished_at.gte.${start.toISOString()}`)
+        .order("started_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as DowntimeLog[];
+      return (data ?? []) as Breakdown[];
     },
+    refetchInterval: 60_000,
   });
 }
 
-export function useUnitLogs(unitId: string | null) {
-  const { start, end } = monthRange();
+export function useUnitBreakdowns(unitId: string | null) {
   return useQuery({
     enabled: !!unitId,
-    queryKey: ["logs", "unit", unitId, start, end],
-    queryFn: async (): Promise<DowntimeLog[]> => {
+    queryKey: ["breakdowns", "unit", unitId],
+    queryFn: async (): Promise<Breakdown[]> => {
       const { data, error } = await supabase
-        .from("downtime_logs")
-        .select("id,unit_id,log_date,downtime_hours,notes")
+        .from("breakdowns")
+        .select("id,unit_id,started_at,finished_at,notes")
         .eq("unit_id", unitId!)
-        .gte("log_date", start)
-        .lte("log_date", end)
-        .order("log_date", { ascending: false });
+        .order("started_at", { ascending: false })
+        .limit(30);
       if (error) throw error;
-      return (data ?? []) as DowntimeLog[];
+      return (data ?? []) as Breakdown[];
     },
   });
 }
 
-export function useUpsertLog() {
+export function useCreateBreakdown() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: {
       unit_id: string;
-      log_date: string;
-      downtime_hours: number;
+      started_at: string;
+      finished_at?: string | null;
       notes?: string | null;
     }) => {
-      const { error } = await supabase
-        .from("downtime_logs")
-        .upsert(input, { onConflict: "unit_id,log_date" });
+      const { error } = await supabase.from("breakdowns").insert(input);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["logs"] });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["breakdowns"] }),
   });
 }
 
-export function useDeleteLog() {
+export function useUpdateBreakdown() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      started_at?: string;
+      finished_at?: string | null;
+      notes?: string | null;
+    }) => {
+      const { id, ...rest } = input;
+      const { error } = await supabase.from("breakdowns").update(rest).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["breakdowns"] }),
+  });
+}
+
+export function useDeleteBreakdown() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("downtime_logs").delete().eq("id", id);
+      const { error } = await supabase.from("breakdowns").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["logs"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["breakdowns"] }),
   });
 }
 
@@ -148,7 +163,7 @@ export function useDeleteUnit() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["units"] });
-      qc.invalidateQueries({ queryKey: ["logs"] });
+      qc.invalidateQueries({ queryKey: ["breakdowns"] });
     },
   });
 }
