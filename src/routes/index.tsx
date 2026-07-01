@@ -1,96 +1,169 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useUnits, useMonthLogs, useSettings, type Unit } from "@/lib/data";
-import { computePA, formatHours, formatPct, paStatusLevel } from "@/lib/pa";
+import { useEffect, useMemo, useState } from "react";
+import {
+  useUnits,
+  useMonthBreakdowns,
+  useSettings,
+  useUpdateBreakdown,
+  type Unit,
+  type Breakdown,
+} from "@/lib/data";
+import {
+  computePA,
+  formatHours,
+  formatPct,
+  paStatusLevel,
+  hoursInMonth,
+  elapsedHours,
+  formatDateTime,
+} from "@/lib/pa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LogDowntimeDialog } from "@/components/LogDowntimeDialog";
+import { BreakdownDialog } from "@/components/BreakdownDialog";
 import { ManageUnitsDialog } from "@/components/ManageUnitsDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
-import { Activity, Plus, Settings, Wrench, Search, TrendingUp, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Activity,
+  Plus,
+  Settings as SettingsIcon,
+  Wrench,
+  Search,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
+  CircleDot,
+  Pencil,
+  Flag,
+  Clock,
+} from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
+type Level = "ok" | "warn" | "bad";
+
 function Dashboard() {
   const { data: units = [], isLoading: unitsLoading } = useUnits();
-  const { data: logs = [] } = useMonthLogs();
+  const { data: breakdowns = [] } = useMonthBreakdowns();
   const { data: settings } = useSettings();
   const target = settings?.pa_target ?? 0.9;
+  const updateBd = useUpdateBreakdown();
 
-  const [logOpen, setLogOpen] = useState(false);
-  const [logUnitId, setLogUnitId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createUnitId, setCreateUnitId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Breakdown | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [q, setQ] = useState("");
 
   const downtimeByUnit = useMemo(() => {
     const map = new Map<string, number>();
-    for (const l of logs) {
-      map.set(l.unit_id, (map.get(l.unit_id) ?? 0) + Number(l.downtime_hours));
+    for (const b of breakdowns) {
+      map.set(
+        b.unit_id,
+        (map.get(b.unit_id) ?? 0) + hoursInMonth(b.started_at, b.finished_at, now),
+      );
     }
     return map;
-  }, [logs]);
+  }, [breakdowns, now]);
+
+  const openByUnit = useMemo(() => {
+    const map = new Map<string, Breakdown>();
+    for (const b of breakdowns) if (!b.finished_at) map.set(b.unit_id, b);
+    return map;
+  }, [breakdowns]);
+
+  const activeBreakdowns = useMemo(
+    () => breakdowns.filter((b) => !b.finished_at),
+    [breakdowns],
+  );
 
   const enriched = useMemo(() => {
     return units
       .filter((u) =>
-        q.trim()
-          ? (u.code + " " + u.name).toLowerCase().includes(q.trim().toLowerCase())
-          : true,
+        q.trim() ? (u.code + " " + u.name).toLowerCase().includes(q.trim().toLowerCase()) : true,
       )
       .map((u) => {
         const dt = downtimeByUnit.get(u.id) ?? 0;
-        const stats = computePA(dt, target);
-        return { unit: u, stats, level: paStatusLevel(stats.paCurrent, target) };
+        const stats = computePA(dt, target, now);
+        const level: Level = paStatusLevel(stats.paCurrent, target);
+        const open = openByUnit.get(u.id) ?? null;
+        return { unit: u, stats, level, open };
       });
-  }, [units, downtimeByUnit, target, q]);
+  }, [units, downtimeByUnit, target, q, openByUnit, now]);
 
   const fleet = useMemo(() => {
     const totalDown = Array.from(downtimeByUnit.values()).reduce((a, b) => a + b, 0);
     const n = units.length || 1;
     const avgDown = totalDown / n;
-    const stats = computePA(avgDown, target);
+    const stats = computePA(avgDown, target, now);
     const critical = enriched.filter((e) => e.level === "bad").length;
     const warn = enriched.filter((e) => e.level === "warn").length;
     const ok = enriched.filter((e) => e.level === "ok").length;
-    return { stats, critical, warn, ok };
-  }, [downtimeByUnit, units.length, target, enriched]);
+    return { stats, critical, warn, ok, activeCount: activeBreakdowns.length };
+  }, [downtimeByUnit, units.length, target, enriched, activeBreakdowns.length, now]);
 
-  const openLogFor = (id: string | null) => {
-    setLogUnitId(id);
-    setLogOpen(true);
+  const openCreate = (unitId: string | null) => {
+    setCreateUnitId(unitId);
+    setCreateOpen(true);
   };
 
-  const monthLabel = new Date().toLocaleString(undefined, { month: "long", year: "numeric" });
+  const finishNow = async (b: Breakdown) => {
+    try {
+      await updateBd.mutateAsync({ id: b.id, finished_at: new Date().toISOString() });
+      toast.success("Marked as finished");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to update");
+    }
+  };
+
+  const monthLabel = now.toLocaleString(undefined, { month: "long", year: "numeric" });
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-secondary text-secondary-foreground">
-        <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
+      {/* Header */}
+      <header className="relative border-b overflow-hidden">
+        <div className="absolute inset-0 bg-secondary" />
+        <div className="absolute inset-0 opacity-[0.15] bg-[radial-gradient(circle_at_20%_10%,var(--primary),transparent_50%),radial-gradient(circle_at_80%_90%,var(--primary),transparent_45%)]" />
+        <div className="relative mx-auto max-w-7xl px-6 py-5 flex items-center justify-between gap-4 flex-wrap text-secondary-foreground">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-md bg-primary flex items-center justify-center">
+            <div className="h-10 w-10 rounded-md bg-primary flex items-center justify-center shadow-lg shadow-primary/30">
               <Wrench className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold leading-none">PA Monitor</h1>
-              <p className="text-xs text-secondary-foreground/70 mt-1">
+              <h1 className="text-xl font-semibold leading-none tracking-tight">PA Monitor</h1>
+              <p className="text-xs text-secondary-foreground/70 mt-1.5">
                 Workshop physical availability · {monthLabel}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}
-              className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white">
-              <Settings className="h-4 w-4 mr-1" /> Target {(target * 100).toFixed(0)}%
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSettingsOpen(true)}
+              className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white"
+            >
+              <SettingsIcon className="h-4 w-4 mr-1" /> Target {(target * 100).toFixed(0)}%
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setManageOpen(true)}
-              className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setManageOpen(true)}
+              className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white"
+            >
               <Wrench className="h-4 w-4 mr-1" /> Units
             </Button>
-            <Button size="sm" onClick={() => openLogFor(null)}>
-              <Plus className="h-4 w-4 mr-1" /> Log downtime
+            <Button size="sm" onClick={() => openCreate(null)} className="shadow-md shadow-primary/20">
+              <Plus className="h-4 w-4 mr-1" /> New breakdown
             </Button>
           </div>
         </div>
@@ -107,6 +180,13 @@ function Dashboard() {
             icon={<TrendingUp className="h-4 w-4" />}
           />
           <KpiCard
+            label="Running breakdowns"
+            value={`${fleet.activeCount}`}
+            hint={fleet.activeCount === 0 ? "All units up" : "Awaiting finish"}
+            tone={fleet.activeCount === 0 ? "ok" : "warn"}
+            icon={<CircleDot className="h-4 w-4" />}
+          />
+          <KpiCard
             label="Units at target"
             value={`${fleet.ok}/${units.length || 0}`}
             hint="Green units"
@@ -114,20 +194,64 @@ function Dashboard() {
             icon={<CheckCircle2 className="h-4 w-4" />}
           />
           <KpiCard
-            label="Warning"
-            value={`${fleet.warn}`}
-            hint="Within 3% of target"
-            tone="warn"
-            icon={<AlertTriangle className="h-4 w-4" />}
-          />
-          <KpiCard
             label="Below target"
             value={`${fleet.critical}`}
-            hint="Needs attention"
-            tone="bad"
-            icon={<Activity className="h-4 w-4" />}
+            hint={`${fleet.warn} in warning`}
+            tone={fleet.critical > 0 ? "bad" : fleet.warn > 0 ? "warn" : "ok"}
+            icon={<AlertTriangle className="h-4 w-4" />}
           />
         </section>
+
+        {/* Active breakdowns strip */}
+        {activeBreakdowns.length > 0 && (
+          <section className="rounded-lg border bg-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b bg-destructive/5">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-60" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
+                </span>
+                Currently down
+                <span className="text-muted-foreground font-normal">
+                  · {activeBreakdowns.length} unit{activeBreakdowns.length === 1 ? "" : "s"}
+                </span>
+              </div>
+            </div>
+            <div className="divide-y">
+              {activeBreakdowns.map((b) => {
+                const u = units.find((x) => x.id === b.unit_id);
+                const el = elapsedHours(b.started_at, null, now);
+                return (
+                  <div key={b.id} className="flex items-center gap-3 px-4 py-3 flex-wrap">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">{u?.code ?? "?"}</span>
+                        <span className="font-semibold truncate">{u?.name ?? "Unknown"}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3 flex-wrap">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="h-3 w-3" /> since {formatDateTime(b.started_at)}
+                        </span>
+                        {b.notes && <span className="truncate">· {b.notes}</span>}
+                      </div>
+                    </div>
+                    <div className="font-mono tabular font-bold text-destructive text-lg">
+                      {formatHours(el)}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setEditing(b)}>
+                        <Pencil className="h-3.5 w-3.5 mr-1" /> Update
+                      </Button>
+                      <Button size="sm" onClick={() => finishNow(b)} disabled={updateBd.isPending}>
+                        <Flag className="h-3.5 w-3.5 mr-1" /> Mark finished
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Toolbar */}
         <div className="flex items-center gap-3 flex-wrap">
@@ -142,7 +266,10 @@ function Dashboard() {
           </div>
           <div className="text-sm text-muted-foreground">
             {enriched.length} unit{enriched.length === 1 ? "" : "s"} · month:{" "}
-            <span className="font-mono">{fleet.stats.dayOfMonth}/{fleet.stats.daysInMonth}</span> days
+            <span className="font-mono">
+              {fleet.stats.dayOfMonth}/{fleet.stats.daysInMonth}
+            </span>{" "}
+            days
           </div>
         </div>
 
@@ -153,24 +280,38 @@ function Dashboard() {
           <EmptyState onAdd={() => setManageOpen(true)} />
         ) : (
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {enriched.map(({ unit, stats, level }) => (
+            {enriched.map(({ unit, stats, level, open }) => (
               <UnitCard
                 key={unit.id}
                 unit={unit}
                 stats={stats}
                 level={level}
+                open={open}
                 target={target}
-                onLog={() => openLogFor(unit.id)}
+                now={now}
+                onRegister={() => openCreate(unit.id)}
+                onUpdateOpen={() => open && setEditing(open)}
+                onFinishOpen={() => open && finishNow(open)}
               />
             ))}
           </section>
         )}
       </main>
 
-      <LogDowntimeDialog
-        open={logOpen}
-        onOpenChange={(v) => { setLogOpen(v); if (!v) setLogUnitId(null); }}
-        defaultUnitId={logUnitId}
+      <BreakdownDialog
+        open={createOpen}
+        onOpenChange={(v) => {
+          setCreateOpen(v);
+          if (!v) setCreateUnitId(null);
+        }}
+        mode="create"
+        defaultUnitId={createUnitId}
+      />
+      <BreakdownDialog
+        open={!!editing}
+        onOpenChange={(v) => !v && setEditing(null)}
+        mode="edit"
+        breakdown={editing}
       />
       <ManageUnitsDialog open={manageOpen} onOpenChange={setManageOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
@@ -178,52 +319,101 @@ function Dashboard() {
   );
 }
 
-function toneClasses(t: "ok" | "warn" | "bad") {
-  if (t === "ok") return { bar: "bg-success", text: "text-success", ring: "ring-success/30", chip: "bg-success/10 text-success" };
-  if (t === "warn") return { bar: "bg-warning", text: "text-warning", ring: "ring-warning/30", chip: "bg-warning/15 text-warning-foreground" };
-  return { bar: "bg-destructive", text: "text-destructive", ring: "ring-destructive/30", chip: "bg-destructive/10 text-destructive" };
+function toneClasses(t: Level) {
+  if (t === "ok")
+    return {
+      bar: "bg-success",
+      text: "text-success",
+      ring: "ring-success/25",
+      chip: "bg-success/10 text-success",
+      accent: "before:bg-success",
+    };
+  if (t === "warn")
+    return {
+      bar: "bg-warning",
+      text: "text-[oklch(0.55_0.15_75)]",
+      ring: "ring-warning/30",
+      chip: "bg-warning/20 text-[oklch(0.4_0.12_75)]",
+      accent: "before:bg-warning",
+    };
+  return {
+    bar: "bg-destructive",
+    text: "text-destructive",
+    ring: "ring-destructive/30",
+    chip: "bg-destructive/10 text-destructive",
+    accent: "before:bg-destructive",
+  };
 }
 
 function KpiCard({
-  label, value, hint, tone, icon,
-}: { label: string; value: string; hint: string; tone: "ok" | "warn" | "bad"; icon: React.ReactNode }) {
+  label,
+  value,
+  hint,
+  tone,
+  icon,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone: Level;
+  icon: React.ReactNode;
+}) {
   const t = toneClasses(tone);
   return (
-    <div className="rounded-lg border bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
+    <div
+      className={`relative rounded-lg border bg-card p-4 shadow-sm overflow-hidden before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 ${t.accent}`}
+    >
+      <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground pl-2">
         <span>{label}</span>
-        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${t.chip}`}>{icon}</span>
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${t.chip}`}>
+          {icon}
+        </span>
       </div>
-      <div className={`mt-2 font-mono tabular text-3xl font-bold ${t.text}`}>{value}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
+      <div className={`mt-2 font-mono tabular text-3xl font-bold pl-2 ${t.text}`}>{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground pl-2">{hint}</div>
     </div>
   );
 }
 
 function UnitCard({
-  unit, stats, level, target, onLog,
+  unit,
+  stats,
+  level,
+  open,
+  target,
+  now,
+  onRegister,
+  onUpdateOpen,
+  onFinishOpen,
 }: {
   unit: Unit;
   stats: ReturnType<typeof computePA>;
-  level: "ok" | "warn" | "bad";
+  level: Level;
+  open: Breakdown | null;
   target: number;
-  onLog: () => void;
+  now: Date;
+  onRegister: () => void;
+  onUpdateOpen: () => void;
+  onFinishOpen: () => void;
 }) {
   const t = toneClasses(level);
-  const budgetPct = Math.min(100, Math.max(0, (stats.downtimeUsedHours / stats.maxAllowedDowntime) * 100));
+  const budgetPct = Math.min(
+    100,
+    Math.max(0, (stats.downtimeUsedHours / Math.max(0.001, stats.maxAllowedDowntime)) * 100),
+  );
   const remainingLabel =
     stats.remainingAllowedDowntime >= 0
-      ? `${formatHours(stats.remainingAllowedDowntime)} left`
-      : `${formatHours(Math.abs(stats.remainingAllowedDowntime))} over`;
+      ? `${formatHours(stats.remainingAllowedDowntime)} left in budget`
+      : `${formatHours(Math.abs(stats.remainingAllowedDowntime))} over budget`;
 
   return (
-    <div className={`rounded-lg border bg-card p-5 shadow-sm ring-1 ${t.ring}`}>
+    <div className={`relative rounded-lg border bg-card p-5 shadow-sm ring-1 ${t.ring} transition-shadow hover:shadow-md`}>
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="font-mono text-xs text-muted-foreground">{unit.code}</div>
-          <div className="text-base font-semibold">{unit.name}</div>
+          <div className="text-base font-semibold truncate">{unit.name}</div>
         </div>
-        <span className={`text-xs font-semibold px-2 py-1 rounded ${t.chip} uppercase tracking-wide`}>
+        <span className={`text-[10px] font-semibold px-2 py-1 rounded ${t.chip} uppercase tracking-wider whitespace-nowrap`}>
           {level === "ok" ? "On target" : level === "warn" ? "Warning" : "Below"}
         </span>
       </div>
@@ -232,10 +422,25 @@ function UnitCard({
         <div className={`font-mono tabular text-4xl font-bold ${t.text}`}>
           {formatPct(stats.paCurrent)}
         </div>
-        <div className="text-xs text-muted-foreground">
-          MTD PA · target {formatPct(target)}
-        </div>
+        <div className="text-xs text-muted-foreground">MTD · goal {formatPct(target)}</div>
       </div>
+
+      {open && (
+        <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-semibold text-destructive">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-60" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive" />
+              </span>
+              DOWN · {formatHours(elapsedHours(open.started_at, null, now))}
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              since {formatDateTime(open.started_at)}
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="mt-4">
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
@@ -250,7 +455,7 @@ function UnitCard({
         <div className={`mt-1 text-xs font-medium ${t.text}`}>{remainingLabel}</div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+      <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded bg-muted/50 p-2">
           <div className="text-muted-foreground">Cal time</div>
           <div className="font-mono tabular font-semibold">{formatHours(stats.calTimeHours)}</div>
@@ -261,9 +466,22 @@ function UnitCard({
         </div>
       </div>
 
-      <Button size="sm" variant="outline" className="mt-4 w-full" onClick={onLog}>
-        <Plus className="h-4 w-4 mr-1" /> Log downtime
-      </Button>
+      <div className="mt-4 flex gap-2">
+        {open ? (
+          <>
+            <Button size="sm" variant="outline" className="flex-1" onClick={onUpdateOpen}>
+              <Pencil className="h-3.5 w-3.5 mr-1" /> Update
+            </Button>
+            <Button size="sm" className="flex-1" onClick={onFinishOpen}>
+              <Flag className="h-3.5 w-3.5 mr-1" /> Finish
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" variant="outline" className="w-full" onClick={onRegister}>
+            <Plus className="h-4 w-4 mr-1" /> Register breakdown
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -274,7 +492,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       <Wrench className="h-10 w-10 mx-auto text-muted-foreground" />
       <h2 className="mt-3 text-lg font-semibold">No units yet</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Add your workshop units to start tracking daily downtime and PA.
+        Add your workshop units to start tracking breakdowns and PA.
       </p>
       <Button className="mt-4" onClick={onAdd}>
         <Plus className="h-4 w-4 mr-1" /> Add your first unit
@@ -282,3 +500,6 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
     </div>
   );
 }
+
+// keep imported for tree-shake safety
+void Activity;

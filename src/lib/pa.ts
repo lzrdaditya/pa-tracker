@@ -5,13 +5,13 @@ export function daysInMonth(year: number, month0: number) {
 }
 
 export interface PAStats {
-  calTimeHours: number;        // total hours in the month
-  elapsedCalHours: number;     // hours elapsed so far in the month (today counted fully)
-  downtimeUsedHours: number;   // logged downtime this month
-  paCurrent: number;           // PA using elapsed cal time (real-time view)
-  paMonthProjected: number;    // PA if no more downtime for rest of month
-  maxAllowedDowntime: number;  // total downtime budget for month at target
-  remainingAllowedDowntime: number; // budget - used (can be negative)
+  calTimeHours: number;
+  elapsedCalHours: number;
+  downtimeUsedHours: number;
+  paCurrent: number;
+  paMonthProjected: number;
+  maxAllowedDowntime: number;
+  remainingAllowedDowntime: number;
   target: number;
   daysInMonth: number;
   dayOfMonth: number;
@@ -34,7 +34,6 @@ export function computePA(
     calTimeHours > 0 ? (calTimeHours - downtimeThisMonth) / calTimeHours : 1;
   const maxAllowedDowntime = calTimeHours * (1 - target);
   const remainingAllowedDowntime = maxAllowedDowntime - downtimeThisMonth;
-
   return {
     calTimeHours,
     elapsedCalHours,
@@ -58,6 +57,7 @@ export function paStatusLevel(pa: number, target: number): "ok" | "warn" | "bad"
 export function formatHours(h: number) {
   const sign = h < 0 ? "-" : "";
   const abs = Math.abs(h);
+  if (abs >= 100) return `${sign}${abs.toFixed(0)}h`;
   return `${sign}${abs.toFixed(1)}h`;
 }
 
@@ -65,16 +65,58 @@ export function formatPct(v: number) {
   return `${(v * 100).toFixed(2)}%`;
 }
 
-export function monthRange(now: Date = new Date()) {
+export function monthBounds(now: Date = new Date()) {
   const y = now.getFullYear();
   const m = now.getMonth();
-  const first = new Date(y, m, 1);
-  const last = new Date(y, m + 1, 0);
-  const toISO = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return { start: toISO(first), end: toISO(last) };
+  const start = new Date(y, m, 1, 0, 0, 0, 0);
+  const end = new Date(y, m + 1, 1, 0, 0, 0, 0);
+  return { start, end };
 }
 
-export function todayISO(now: Date = new Date()) {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+/** Hours of a breakdown that fall inside the current month, up to now if still open. */
+export function hoursInMonth(
+  startedAt: string,
+  finishedAt: string | null,
+  now: Date = new Date(),
+) {
+  const { start, end } = monthBounds(now);
+  const s = new Date(startedAt);
+  const rawEnd = finishedAt ? new Date(finishedAt) : now;
+  const lo = s > start ? s : start;
+  const hiCap = rawEnd < end ? rawEnd : end;
+  const hi = hiCap < now ? hiCap : now;
+  const ms = hi.getTime() - lo.getTime();
+  return ms > 0 ? ms / 3_600_000 : 0;
+}
+
+/** Total elapsed hours of a breakdown regardless of month (for display). */
+export function elapsedHours(
+  startedAt: string,
+  finishedAt: string | null,
+  now: Date = new Date(),
+) {
+  const s = new Date(startedAt).getTime();
+  const e = (finishedAt ? new Date(finishedAt) : now).getTime();
+  return Math.max(0, (e - s) / 3_600_000);
+}
+
+/** ISO local datetime string suitable for <input type="datetime-local">. */
+export function toLocalInput(d: Date = new Date()) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function fromLocalInput(v: string) {
+  // Interpreted in local time by Date constructor
+  return new Date(v).toISOString();
+}
+
+export function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
