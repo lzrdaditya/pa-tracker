@@ -14,7 +14,89 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      app_settings: {
+        Row: {
+          id: number
+          pa_target: number
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          pa_target?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          pa_target?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      downtime_logs: {
+        Row: {
+          created_at: string
+          downtime_hours: number
+          id: string
+          log_date: string
+          notes: string | null
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          downtime_hours?: number
+          id?: string
+          log_date: string
+          notes?: string | null
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          downtime_hours?: number
+          id?: string
+          log_date?: string
+          notes?: string | null
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "downtime_logs_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      units: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
