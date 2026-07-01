@@ -32,6 +32,44 @@ export type Database = {
         }
         Relationships: []
       }
+      breakdowns: {
+        Row: {
+          created_at: string
+          finished_at: string | null
+          id: string
+          notes: string | null
+          started_at: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          notes?: string | null
+          started_at: string
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          notes?: string | null
+          started_at?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "breakdowns_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       downtime_logs: {
         Row: {
           created_at: string
