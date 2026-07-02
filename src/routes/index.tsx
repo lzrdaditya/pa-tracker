@@ -581,6 +581,9 @@ function UnitCard({
   stoppages,
   mtbs,
   mttr,
+  remStop,
+  remMttr,
+  maxNext,
   onRegister,
   onUpdateOpen,
   onFinishOpen,
@@ -594,10 +597,14 @@ function UnitCard({
   stoppages: number;
   mtbs: number | null;
   mttr: number | null;
+  remStop: number | null;
+  remMttr: number | null;
+  maxNext: number | null;
   onRegister: () => void;
   onUpdateOpen: () => void;
   onFinishOpen: () => void;
 }) {
+
   const t = toneClasses(level);
   const budgetPct = Math.min(
     100,
