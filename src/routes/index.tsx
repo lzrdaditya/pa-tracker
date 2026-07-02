@@ -19,7 +19,12 @@ import {
   computeMTBS,
   computeMTTR,
   formatHoursOrDash,
+  remainingStoppages,
+  remainingMttrBudget,
+  maxHoursNextRepair,
+  budgetStatus,
 } from "@/lib/pa";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
