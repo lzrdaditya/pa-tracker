@@ -666,26 +666,61 @@ function UnitCard({
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded bg-muted/50 p-2">
-          <div className="text-muted-foreground">Cal time</div>
-          <div className="font-mono tabular font-semibold">{formatHours(stats.calTimeHours)}</div>
-        </div>
-        <div className="rounded bg-muted/50 p-2">
-          <div className="text-muted-foreground">EOM projected</div>
-          <div className="font-mono tabular font-semibold">{formatPct(stats.paMonthProjected)}</div>
-        </div>
-        <div className="rounded bg-muted/50 p-2">
           <div className="text-muted-foreground">MTBS</div>
           <div className="font-mono tabular font-semibold">{formatHoursOrDash(mtbs)}</div>
+          <div className="text-[10px] text-muted-foreground">target {formatHours(unit.mtbs_target_hours)}</div>
         </div>
         <div className="rounded bg-muted/50 p-2">
           <div className="text-muted-foreground">MTTR</div>
           <div className="font-mono tabular font-semibold">{formatHoursOrDash(mttr)}</div>
+          <div className="text-[10px] text-muted-foreground">target ≤ {formatHours(unit.mttr_target_hours)}</div>
         </div>
         <div className="rounded bg-muted/50 p-2 col-span-2">
           <div className="text-muted-foreground">Stoppages this period</div>
           <div className="font-mono tabular font-semibold">{stoppages}</div>
         </div>
       </div>
+
+      {/* Remaining reliability budgets */}
+      <div className="mt-3 rounded-md border bg-muted/20 p-3">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+          Remaining budget
+        </div>
+        <div className="grid gap-2 text-xs">
+          <BudgetRow
+            label="Stoppages allowed"
+            value={
+              remStop === null
+                ? "—"
+                : remStop >= 0
+                  ? `${remStop} more`
+                  : `${Math.abs(remStop)} over`
+            }
+            tone={budgetStatus(remStop, Math.max(1, (remStop ?? 0) + stoppages))}
+            hint="Before MTBS falls below target"
+          />
+          <BudgetRow
+            label="MTTR headroom"
+            value={
+              remMttr === null
+                ? "—"
+                : remMttr >= 0
+                  ? `+${formatHours(remMttr)}`
+                  : `−${formatHours(Math.abs(remMttr))}`
+            }
+            tone={budgetStatus(remMttr, Math.max(0.001, unit.mttr_target_hours * Math.max(1, stoppages)))}
+            hint={stoppages === 0 ? "No stoppages yet" : "Total repair-hour headroom"}
+          />
+          <BudgetRow
+            label="Next repair ≤"
+            value={maxNext === null ? "—" : maxNext >= 0 ? formatHours(maxNext) : "0h (breached)"}
+            tone={budgetStatus(maxNext, Math.max(0.001, unit.mttr_target_hours))}
+            hint="Max duration to stay on MTTR"
+          />
+        </div>
+      </div>
+
+
 
 
       <div className="mt-4 flex gap-2">
