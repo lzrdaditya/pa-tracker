@@ -347,6 +347,32 @@ function Dashboard() {
           />
         </section>
 
+        {/* Reliability KPIs */}
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <KpiCard
+            label="MTBS (Fleet)"
+            value={formatHoursOrDash(fleet.mtbs)}
+            hint="Mean time between stoppage"
+            tone="ok"
+            icon={<Gauge className="h-4 w-4" />}
+          />
+          <KpiCard
+            label="MTTR (Fleet)"
+            value={formatHoursOrDash(fleet.mttr)}
+            hint="Mean time to repair"
+            tone={fleet.mttr !== null && fleet.mttr > 8 ? "warn" : "ok"}
+            icon={<Timer className="h-4 w-4" />}
+          />
+          <KpiCard
+            label="Stoppages"
+            value={`${fleet.totalStoppages}`}
+            hint="Recorded this period"
+            tone={fleet.totalStoppages === 0 ? "ok" : "warn"}
+            icon={<AlertTriangle className="h-4 w-4" />}
+          />
+        </section>
+
+
         {/* Active breakdowns strip */}
         {isCurrentMonth && activeBreakdowns.length > 0 && (
           <section className="rounded-lg border bg-card overflow-hidden">
