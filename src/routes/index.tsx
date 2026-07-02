@@ -465,7 +465,7 @@ function Dashboard() {
           <EmptyState onAdd={() => setManageOpen(true)} />
         ) : (
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {enriched.map(({ unit, stats, level, open, stoppages, mtbs, mttr }) => (
+            {enriched.map(({ unit, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext }) => (
               <UnitCard
                 key={unit.id}
                 unit={unit}
@@ -477,12 +477,16 @@ function Dashboard() {
                 stoppages={stoppages}
                 mtbs={mtbs}
                 mttr={mttr}
+                remStop={remStop}
+                remMttr={remMttr}
+                maxNext={maxNext}
                 onRegister={() => openCreate(unit.id)}
                 onUpdateOpen={() => open && setEditing(open)}
                 onFinishOpen={() => open && finishNow(open)}
               />
             ))}
           </section>
+
         )}
       </main>
 
