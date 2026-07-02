@@ -113,6 +113,8 @@ export type Database = {
           code: string
           created_at: string
           id: string
+          mtbs_target_hours: number
+          mttr_target_hours: number
           name: string
           notes: string | null
           updated_at: string
@@ -121,6 +123,8 @@ export type Database = {
           code: string
           created_at?: string
           id?: string
+          mtbs_target_hours?: number
+          mttr_target_hours?: number
           name: string
           notes?: string | null
           updated_at?: string
@@ -129,6 +133,8 @@ export type Database = {
           code?: string
           created_at?: string
           id?: string
+          mtbs_target_hours?: number
+          mttr_target_hours?: number
           name?: string
           notes?: string | null
           updated_at?: string
