@@ -208,10 +208,18 @@ function Dashboard() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setManageOpen(true)}
+              onClick={() => { setManageStartNew(false); setManageOpen(true); }}
               className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white"
             >
               <Wrench className="h-4 w-4 mr-1" /> Units
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setManageStartNew(true); setManageOpen(true); }}
+              className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white"
+            >
+              <PlusCircle className="h-4 w-4 mr-1" /> Register unit
             </Button>
             <Button size="sm" onClick={() => openCreate(null)} className="shadow-md shadow-primary/20">
               <Plus className="h-4 w-4 mr-1" /> New breakdown
@@ -221,6 +229,68 @@ function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-6 space-y-6">
+        {/* Filters strip */}
+        <section className="rounded-lg border bg-card p-3 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            <Filter className="h-3.5 w-3.5" /> View
+          </div>
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="h-9 w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                    {m.value === currentMonthKey ? " (current)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-muted-foreground" />
+            <Select value={classFilter} onValueChange={setClassFilter}>
+              <SelectTrigger className="h-9 w-[200px]">
+                <SelectValue placeholder="All classes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All classes ({units.length})</SelectItem>
+                {classes.map((c) => {
+                  const count = units.filter((u) => (u.notes ?? "") === c).length;
+                  return (
+                    <SelectItem key={c} value={c}>
+                      {c} ({count})
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+          {(classFilter !== "all" || !isCurrentMonth) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setClassFilter("all");
+                setSelectedMonth(currentMonthKey);
+              }}
+            >
+              Reset
+            </Button>
+          )}
+          <div className="ml-auto text-xs text-muted-foreground">
+            Showing <span className="font-semibold text-foreground">{enriched.length}</span>{" "}
+            of {units.length} unit{units.length === 1 ? "" : "s"}
+            {!isCurrentMonth && (
+              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
+                Historical view
+              </span>
+            )}
+          </div>
+        </section>
         {/* Fleet KPIs */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
