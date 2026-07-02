@@ -18,11 +18,13 @@ export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
   const [editing, setEditing] = useState<Partial<Unit> | null>(null);
 
   useEffect(() => {
-    if (open && startInNew) setEditing({ code: "", name: "", notes: "" });
+    if (open && startInNew)
+      setEditing({ code: "", name: "", notes: "", mtbs_target_hours: 100, mttr_target_hours: 8 });
     if (!open) setEditing(null);
   }, [open, startInNew]);
 
-  const startNew = () => setEditing({ code: "", name: "", notes: "" });
+  const startNew = () =>
+    setEditing({ code: "", name: "", notes: "", mtbs_target_hours: 100, mttr_target_hours: 8 });
 
   const submit = async () => {
     if (!editing) return;
@@ -33,6 +35,8 @@ export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
         code: editing.code.trim(),
         name: editing.name.trim(),
         notes: editing.notes ?? null,
+        mtbs_target_hours: Number(editing.mtbs_target_hours ?? 100),
+        mttr_target_hours: Number(editing.mttr_target_hours ?? 8),
       });
       toast.success("Unit saved");
       setEditing(null);
@@ -40,6 +44,7 @@ export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
       toast.error(e.message ?? "Save failed");
     }
   };
+
 
   const remove = async (u: Unit) => {
     if (!confirm(`Delete ${u.code}? All its downtime logs will also be removed.`)) return;
