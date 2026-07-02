@@ -76,13 +76,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Track physical availability (PA) for every workshop unit. Log daily downtime and see how much downtime budget remains this month.",
       },
-      { property: "og:title", content: "PA Monitor — Workshop Availability Dashboard" },
+      { property: "og:title", content: "PA Monitor — Workshop Physical Availability Dashboard" },
       {
         property: "og:description",
         content: "Daily downtime logging and PA tracking for workshop units.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "PA Monitor — Workshop Physical Availability Dashboard" },
+      { name: "description", content: "Monitor workshop unit physical availability (PA) and remaining downtime with a daily update dashboard." },
+      { property: "og:description", content: "Monitor workshop unit physical availability (PA) and remaining downtime with a daily update dashboard." },
+      { name: "twitter:description", content: "Monitor workshop unit physical availability (PA) and remaining downtime with a daily update dashboard." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a16ae4d5-64d2-4933-bdd6-e4157163d890/id-preview-d6e002ae--ed46fd7a-3560-46a3-ae6e-83e40174dcbf.lovable.app-1782952473349.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a16ae4d5-64d2-4933-bdd6-e4157163d890/id-preview-d6e002ae--ed46fd7a-3560-46a3-ae6e-83e40174dcbf.lovable.app-1782952473349.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
