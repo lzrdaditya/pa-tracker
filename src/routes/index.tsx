@@ -19,6 +19,13 @@ import {
 } from "@/lib/pa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { BreakdownDialog } from "@/components/BreakdownDialog";
 import { ManageUnitsDialog } from "@/components/ManageUnitsDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
@@ -36,6 +43,9 @@ import {
   Pencil,
   Flag,
   Clock,
+  Filter,
+  CalendarDays,
+  PlusCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
