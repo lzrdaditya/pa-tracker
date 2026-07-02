@@ -56,34 +56,71 @@ type Level = "ok" | "warn" | "bad";
 
 function Dashboard() {
   const { data: units = [], isLoading: unitsLoading } = useUnits();
-  const { data: breakdowns = [] } = useMonthBreakdowns();
   const { data: settings } = useSettings();
   const target = settings?.pa_target ?? 0.9;
   const updateBd = useUpdateBreakdown();
 
-  const [now, setNow] = useState(() => new Date());
+  const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 60_000);
+    const t = setInterval(() => setClock(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
+
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [classFilter, setClassFilter] = useState<string>("all");
+
+  const currentMonthKey = `${clock.getFullYear()}-${String(clock.getMonth() + 1).padStart(2, "0")}`;
+  const isCurrentMonth = selectedMonth === currentMonthKey;
+
+  const anchor = useMemo(() => {
+    const [ys, ms] = selectedMonth.split("-").map(Number);
+    if (isCurrentMonth) return clock;
+    return new Date(ys, ms, 0, 23, 59, 59);
+  }, [selectedMonth, isCurrentMonth, clock]);
+
+  const { data: breakdowns = [] } = useMonthBreakdowns(anchor);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createUnitId, setCreateUnitId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Breakdown | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
+  const [manageStartNew, setManageStartNew] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [q, setQ] = useState("");
+
+  const classes = useMemo(() => {
+    const s = new Set<string>();
+    for (const u of units) {
+      const c = (u.notes ?? "").trim();
+      if (c) s.add(c);
+    }
+    return Array.from(s).sort();
+  }, [units]);
+
+  const monthOptions = useMemo(() => {
+    const out: { value: string; label: string }[] = [];
+    const base = new Date(clock.getFullYear(), clock.getMonth(), 1);
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+      const v = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      out.push({ value: v, label: d.toLocaleString(undefined, { month: "long", year: "numeric" }) });
+    }
+    return out;
+  }, [clock]);
 
   const downtimeByUnit = useMemo(() => {
     const map = new Map<string, number>();
     for (const b of breakdowns) {
       map.set(
         b.unit_id,
-        (map.get(b.unit_id) ?? 0) + hoursInMonth(b.started_at, b.finished_at, now),
+        (map.get(b.unit_id) ?? 0) + hoursInMonth(b.started_at, b.finished_at, anchor),
       );
     }
     return map;
-  }, [breakdowns, now]);
+  }, [breakdowns, anchor]);
 
   const openByUnit = useMemo(() => {
     const map = new Map<string, Breakdown>();
