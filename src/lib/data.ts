@@ -31,8 +31,9 @@ export function useUnits() {
     queryFn: async (): Promise<Unit[]> => {
       const { data, error } = await supabase
         .from("units")
-        .select("id,code,name,notes")
+        .select("id,code,name,notes,mtbs_target_hours,mttr_target_hours")
         .order("code");
+
       if (error) throw error;
       return data ?? [];
     },
