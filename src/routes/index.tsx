@@ -140,23 +140,23 @@ function Dashboard() {
       )
       .map((u) => {
         const dt = downtimeByUnit.get(u.id) ?? 0;
-        const stats = computePA(dt, target, now);
+        const stats = computePA(dt, target, anchor);
         const level: Level = paStatusLevel(stats.paCurrent, target);
         const open = openByUnit.get(u.id) ?? null;
         return { unit: u, stats, level, open };
       });
-  }, [units, downtimeByUnit, target, q, openByUnit, now]);
+  }, [units, downtimeByUnit, target, q, openByUnit, anchor]);
 
   const fleet = useMemo(() => {
     const totalDown = Array.from(downtimeByUnit.values()).reduce((a, b) => a + b, 0);
     const n = units.length || 1;
     const avgDown = totalDown / n;
-    const stats = computePA(avgDown, target, now);
+    const stats = computePA(avgDown, target, anchor);
     const critical = enriched.filter((e) => e.level === "bad").length;
     const warn = enriched.filter((e) => e.level === "warn").length;
     const ok = enriched.filter((e) => e.level === "ok").length;
     return { stats, critical, warn, ok, activeCount: activeBreakdowns.length };
-  }, [downtimeByUnit, units.length, target, enriched, activeBreakdowns.length, now]);
+  }, [downtimeByUnit, units.length, target, enriched, activeBreakdowns.length, anchor]);
 
   const openCreate = (unitId: string | null) => {
     setCreateUnitId(unitId);
@@ -172,7 +172,7 @@ function Dashboard() {
     }
   };
 
-  const monthLabel = now.toLocaleString(undefined, { month: "long", year: "numeric" });
+  const monthLabel = anchor.toLocaleString(undefined, { month: "long", year: "numeric" });
 
   return (
     <div className="min-h-screen bg-background">
@@ -267,7 +267,7 @@ function Dashboard() {
             <div className="divide-y">
               {activeBreakdowns.map((b) => {
                 const u = units.find((x) => x.id === b.unit_id);
-                const el = elapsedHours(b.started_at, null, now);
+                const el = elapsedHours(b.started_at, null, anchor);
                 return (
                   <div key={b.id} className="flex items-center gap-3 px-4 py-3 flex-wrap">
                     <div className="min-w-0 flex-1">
@@ -335,7 +335,7 @@ function Dashboard() {
                 level={level}
                 open={open}
                 target={target}
-                now={now}
+                anchor={anchor}
                 onRegister={() => openCreate(unit.id)}
                 onUpdateOpen={() => open && setEditing(open)}
                 onFinishOpen={() => open && finishNow(open)}
