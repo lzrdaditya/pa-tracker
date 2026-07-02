@@ -560,6 +560,9 @@ function UnitCard({
   open,
   target,
   now,
+  stoppages,
+  mtbs,
+  mttr,
   onRegister,
   onUpdateOpen,
   onFinishOpen,
@@ -570,6 +573,9 @@ function UnitCard({
   open: Breakdown | null;
   target: number;
   now: Date;
+  stoppages: number;
+  mtbs: number | null;
+  mttr: number | null;
   onRegister: () => void;
   onUpdateOpen: () => void;
   onFinishOpen: () => void;
