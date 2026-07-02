@@ -83,6 +83,32 @@ export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
                 />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label>MTBS target (h)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={editing.mtbs_target_hours ?? ""}
+                  onChange={(e) =>
+                    setEditing({ ...editing, mtbs_target_hours: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>MTTR target (h)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={editing.mttr_target_hours ?? ""}
+                  onChange={(e) =>
+                    setEditing({ ...editing, mttr_target_hours: Number(e.target.value) })
+                  }
+                />
+              </div>
+            </div>
             <div className="grid gap-2">
               <Label>Notes</Label>
               <Textarea
@@ -91,6 +117,7 @@ export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
                 onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
               />
             </div>
+
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setEditing(null)}>
                 <X className="h-4 w-4 mr-1" /> Cancel
