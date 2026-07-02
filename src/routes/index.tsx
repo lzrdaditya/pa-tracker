@@ -743,6 +743,30 @@ function UnitCard({
   );
 }
 
+function BudgetRow({
+  label,
+  value,
+  tone,
+  hint,
+}: {
+  label: string;
+  value: string;
+  tone: Level;
+  hint?: string;
+}) {
+  const t = toneClasses(tone);
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-xs font-medium">{label}</div>
+        {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
+      </div>
+      <div className={`font-mono tabular text-sm font-bold ${t.text} whitespace-nowrap`}>{value}</div>
+    </div>
+  );
+}
+
+
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="rounded-lg border border-dashed p-12 text-center bg-card">
