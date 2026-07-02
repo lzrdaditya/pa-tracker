@@ -294,7 +294,7 @@ function Dashboard() {
         {/* Fleet KPIs */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
-            label="Fleet PA (MTD)"
+            label={isCurrentMonth ? "Fleet PA (MTD)" : "Fleet PA"}
             value={formatPct(fleet.stats.paCurrent)}
             hint={`Target ${formatPct(target)}`}
             tone={paStatusLevel(fleet.stats.paCurrent, target)}
@@ -324,7 +324,7 @@ function Dashboard() {
         </section>
 
         {/* Active breakdowns strip */}
-        {activeBreakdowns.length > 0 && (
+        {isCurrentMonth && activeBreakdowns.length > 0 && (
           <section className="rounded-lg border bg-card overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2.5 border-b bg-destructive/5">
               <div className="flex items-center gap-2 text-sm font-semibold">
@@ -434,7 +434,11 @@ function Dashboard() {
         mode="edit"
         breakdown={editing}
       />
-      <ManageUnitsDialog open={manageOpen} onOpenChange={setManageOpen} />
+      <ManageUnitsDialog
+        open={manageOpen}
+        onOpenChange={(v) => { setManageOpen(v); if (!v) setManageStartNew(false); }}
+        startInNew={manageStartNew}
+      />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
@@ -565,7 +569,7 @@ function UnitCard({
 
       <div className="mt-4">
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-          <span>Downtime budget</span>
+          <span>Remaining Downtime Allowed</span>
           <span className="font-mono tabular">
             {formatHours(stats.downtimeUsedHours)} / {formatHours(stats.maxAllowedDowntime)}
           </span>
