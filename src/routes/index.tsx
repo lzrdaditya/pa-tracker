@@ -16,6 +16,9 @@ import {
   hoursInMonth,
   elapsedHours,
   formatDateTime,
+  computeMTBS,
+  computeMTTR,
+  formatHoursOrDash,
 } from "@/lib/pa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +49,8 @@ import {
   Filter,
   CalendarDays,
   PlusCircle,
+  Timer,
+  Gauge,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -122,6 +127,17 @@ function Dashboard() {
     return map;
   }, [breakdowns, anchor]);
 
+  const stoppageCountByUnit = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const b of breakdowns) {
+      if (hoursInMonth(b.started_at, b.finished_at, anchor) > 0) {
+        map.set(b.unit_id, (map.get(b.unit_id) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [breakdowns, anchor]);
+
+
   const openByUnit = useMemo(() => {
     const map = new Map<string, Breakdown>();
     for (const b of breakdowns) if (!b.finished_at) map.set(b.unit_id, b);
@@ -142,15 +158,19 @@ function Dashboard() {
       )
       .map((u) => {
         const dt = downtimeByUnit.get(u.id) ?? 0;
+        const stoppages = stoppageCountByUnit.get(u.id) ?? 0;
         const stats = computePA(dt, target, anchor);
         const level: Level = paStatusLevel(stats.paCurrent, target);
         const open = openByUnit.get(u.id) ?? null;
-        return { unit: u, stats, level, open };
+        const mtbs = computeMTBS(stats.elapsedCalHours, dt, stoppages);
+        const mttr = computeMTTR(dt, stoppages);
+        return { unit: u, stats, level, open, stoppages, mtbs, mttr };
       });
-  }, [units, downtimeByUnit, target, q, openByUnit, anchor, classFilter]);
+  }, [units, downtimeByUnit, stoppageCountByUnit, target, q, openByUnit, anchor, classFilter]);
 
   const fleet = useMemo(() => {
     const totalDown = enriched.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
+    const totalStoppages = enriched.reduce((a, e) => a + e.stoppages, 0);
     const n = enriched.length || 1;
     const avgDown = totalDown / n;
     const stats = computePA(avgDown, target, anchor);
@@ -159,8 +179,12 @@ function Dashboard() {
     const ok = enriched.filter((e) => e.level === "ok").length;
     const enrichedIds = new Set(enriched.map((e) => e.unit.id));
     const activeCount = activeBreakdowns.filter((b) => enrichedIds.has(b.unit_id)).length;
-    return { stats, critical, warn, ok, activeCount };
+    const totalReady = enriched.reduce((a, e) => a + e.stats.elapsedCalHours, 0);
+    const mtbs = computeMTBS(totalReady, totalDown, totalStoppages);
+    const mttr = computeMTTR(totalDown, totalStoppages);
+    return { stats, critical, warn, ok, activeCount, totalStoppages, mtbs, mttr };
   }, [enriched, target, anchor, activeBreakdowns]);
+
 
   const openCreate = (unitId: string | null) => {
     setCreateUnitId(unitId);
@@ -323,6 +347,32 @@ function Dashboard() {
           />
         </section>
 
+        {/* Reliability KPIs */}
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <KpiCard
+            label="MTBS (Fleet)"
+            value={formatHoursOrDash(fleet.mtbs)}
+            hint="Mean time between stoppage"
+            tone="ok"
+            icon={<Gauge className="h-4 w-4" />}
+          />
+          <KpiCard
+            label="MTTR (Fleet)"
+            value={formatHoursOrDash(fleet.mttr)}
+            hint="Mean time to repair"
+            tone={fleet.mttr !== null && fleet.mttr > 8 ? "warn" : "ok"}
+            icon={<Timer className="h-4 w-4" />}
+          />
+          <KpiCard
+            label="Stoppages"
+            value={`${fleet.totalStoppages}`}
+            hint="Recorded this period"
+            tone={fleet.totalStoppages === 0 ? "ok" : "warn"}
+            icon={<AlertTriangle className="h-4 w-4" />}
+          />
+        </section>
+
+
         {/* Active breakdowns strip */}
         {isCurrentMonth && activeBreakdowns.length > 0 && (
           <section className="rounded-lg border bg-card overflow-hidden">
@@ -401,7 +451,7 @@ function Dashboard() {
           <EmptyState onAdd={() => setManageOpen(true)} />
         ) : (
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {enriched.map(({ unit, stats, level, open }) => (
+            {enriched.map(({ unit, stats, level, open, stoppages, mtbs, mttr }) => (
               <UnitCard
                 key={unit.id}
                 unit={unit}
@@ -410,6 +460,9 @@ function Dashboard() {
                 open={open}
                 target={target}
                 now={anchor}
+                stoppages={stoppages}
+                mtbs={mtbs}
+                mttr={mttr}
                 onRegister={() => openCreate(unit.id)}
                 onUpdateOpen={() => open && setEditing(open)}
                 onFinishOpen={() => open && finishNow(open)}
@@ -507,6 +560,9 @@ function UnitCard({
   open,
   target,
   now,
+  stoppages,
+  mtbs,
+  mttr,
   onRegister,
   onUpdateOpen,
   onFinishOpen,
@@ -517,6 +573,9 @@ function UnitCard({
   open: Breakdown | null;
   target: number;
   now: Date;
+  stoppages: number;
+  mtbs: number | null;
+  mttr: number | null;
   onRegister: () => void;
   onUpdateOpen: () => void;
   onFinishOpen: () => void;
@@ -589,7 +648,20 @@ function UnitCard({
           <div className="text-muted-foreground">EOM projected</div>
           <div className="font-mono tabular font-semibold">{formatPct(stats.paMonthProjected)}</div>
         </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">MTBS</div>
+          <div className="font-mono tabular font-semibold">{formatHoursOrDash(mtbs)}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">MTTR</div>
+          <div className="font-mono tabular font-semibold">{formatHoursOrDash(mttr)}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2 col-span-2">
+          <div className="text-muted-foreground">Stoppages this period</div>
+          <div className="font-mono tabular font-semibold">{stoppages}</div>
+        </div>
       </div>
+
 
       <div className="mt-4 flex gap-2">
         {open ? (

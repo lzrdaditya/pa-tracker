@@ -61,6 +61,24 @@ export function formatHours(h: number) {
   return `${sign}${abs.toFixed(1)}h`;
 }
 
+/** MTBS = (Ready Hour - Downtime) / No of Stoppage, where Ready Hour = Elapsed Cal - Downtime */
+export function computeMTBS(elapsedCalHours: number, downtime: number, stoppages: number) {
+  if (stoppages <= 0) return null;
+  return (elapsedCalHours - downtime - downtime) / stoppages;
+}
+
+/** MTTR = Downtime / No of Stoppage */
+export function computeMTTR(downtime: number, stoppages: number) {
+  if (stoppages <= 0) return null;
+  return downtime / stoppages;
+}
+
+export function formatHoursOrDash(h: number | null) {
+  if (h === null || !isFinite(h)) return "—";
+  return formatHours(h);
+}
+
+
 export function formatPct(v: number) {
   return `${(v * 100).toFixed(2)}%`;
 }
