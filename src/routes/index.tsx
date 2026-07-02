@@ -134,9 +134,11 @@ function Dashboard() {
   );
 
   const enriched = useMemo(() => {
+    const needle = q.trim().toLowerCase();
     return units
+      .filter((u) => (classFilter === "all" ? true : (u.notes ?? "") === classFilter))
       .filter((u) =>
-        q.trim() ? (u.code + " " + u.name).toLowerCase().includes(q.trim().toLowerCase()) : true,
+        needle ? (u.code + " " + u.name).toLowerCase().includes(needle) : true,
       )
       .map((u) => {
         const dt = downtimeByUnit.get(u.id) ?? 0;
@@ -145,7 +147,7 @@ function Dashboard() {
         const open = openByUnit.get(u.id) ?? null;
         return { unit: u, stats, level, open };
       });
-  }, [units, downtimeByUnit, target, q, openByUnit, anchor]);
+  }, [units, downtimeByUnit, target, q, openByUnit, anchor, classFilter]);
 
   const fleet = useMemo(() => {
     const totalDown = Array.from(downtimeByUnit.values()).reduce((a, b) => a + b, 0);
