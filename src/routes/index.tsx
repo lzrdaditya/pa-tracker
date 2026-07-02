@@ -335,7 +335,7 @@ function Dashboard() {
                 level={level}
                 open={open}
                 target={target}
-                anchor={anchor}
+                now={anchor}
                 onRegister={() => openCreate(unit.id)}
                 onUpdateOpen={() => open && setEditing(open)}
                 onFinishOpen={() => open && finishNow(open)}
