@@ -19,6 +19,13 @@ import {
 } from "@/lib/pa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { BreakdownDialog } from "@/components/BreakdownDialog";
 import { ManageUnitsDialog } from "@/components/ManageUnitsDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
@@ -36,6 +43,9 @@ import {
   Pencil,
   Flag,
   Clock,
+  Filter,
+  CalendarDays,
+  PlusCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -46,34 +56,71 @@ type Level = "ok" | "warn" | "bad";
 
 function Dashboard() {
   const { data: units = [], isLoading: unitsLoading } = useUnits();
-  const { data: breakdowns = [] } = useMonthBreakdowns();
   const { data: settings } = useSettings();
   const target = settings?.pa_target ?? 0.9;
   const updateBd = useUpdateBreakdown();
 
-  const [now, setNow] = useState(() => new Date());
+  const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 60_000);
+    const t = setInterval(() => setClock(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
+
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [classFilter, setClassFilter] = useState<string>("all");
+
+  const currentMonthKey = `${clock.getFullYear()}-${String(clock.getMonth() + 1).padStart(2, "0")}`;
+  const isCurrentMonth = selectedMonth === currentMonthKey;
+
+  const anchor = useMemo(() => {
+    const [ys, ms] = selectedMonth.split("-").map(Number);
+    if (isCurrentMonth) return clock;
+    return new Date(ys, ms, 0, 23, 59, 59);
+  }, [selectedMonth, isCurrentMonth, clock]);
+
+  const { data: breakdowns = [] } = useMonthBreakdowns(anchor);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createUnitId, setCreateUnitId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Breakdown | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
+  const [manageStartNew, setManageStartNew] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [q, setQ] = useState("");
+
+  const classes = useMemo(() => {
+    const s = new Set<string>();
+    for (const u of units) {
+      const c = (u.notes ?? "").trim();
+      if (c) s.add(c);
+    }
+    return Array.from(s).sort();
+  }, [units]);
+
+  const monthOptions = useMemo(() => {
+    const out: { value: string; label: string }[] = [];
+    const base = new Date(clock.getFullYear(), clock.getMonth(), 1);
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+      const v = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      out.push({ value: v, label: d.toLocaleString(undefined, { month: "long", year: "numeric" }) });
+    }
+    return out;
+  }, [clock]);
 
   const downtimeByUnit = useMemo(() => {
     const map = new Map<string, number>();
     for (const b of breakdowns) {
       map.set(
         b.unit_id,
-        (map.get(b.unit_id) ?? 0) + hoursInMonth(b.started_at, b.finished_at, now),
+        (map.get(b.unit_id) ?? 0) + hoursInMonth(b.started_at, b.finished_at, anchor),
       );
     }
     return map;
-  }, [breakdowns, now]);
+  }, [breakdowns, anchor]);
 
   const openByUnit = useMemo(() => {
     const map = new Map<string, Breakdown>();
@@ -87,29 +134,33 @@ function Dashboard() {
   );
 
   const enriched = useMemo(() => {
+    const needle = q.trim().toLowerCase();
     return units
+      .filter((u) => (classFilter === "all" ? true : (u.notes ?? "") === classFilter))
       .filter((u) =>
-        q.trim() ? (u.code + " " + u.name).toLowerCase().includes(q.trim().toLowerCase()) : true,
+        needle ? (u.code + " " + u.name).toLowerCase().includes(needle) : true,
       )
       .map((u) => {
         const dt = downtimeByUnit.get(u.id) ?? 0;
-        const stats = computePA(dt, target, now);
+        const stats = computePA(dt, target, anchor);
         const level: Level = paStatusLevel(stats.paCurrent, target);
         const open = openByUnit.get(u.id) ?? null;
         return { unit: u, stats, level, open };
       });
-  }, [units, downtimeByUnit, target, q, openByUnit, now]);
+  }, [units, downtimeByUnit, target, q, openByUnit, anchor, classFilter]);
 
   const fleet = useMemo(() => {
-    const totalDown = Array.from(downtimeByUnit.values()).reduce((a, b) => a + b, 0);
-    const n = units.length || 1;
+    const totalDown = enriched.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
+    const n = enriched.length || 1;
     const avgDown = totalDown / n;
-    const stats = computePA(avgDown, target, now);
+    const stats = computePA(avgDown, target, anchor);
     const critical = enriched.filter((e) => e.level === "bad").length;
     const warn = enriched.filter((e) => e.level === "warn").length;
     const ok = enriched.filter((e) => e.level === "ok").length;
-    return { stats, critical, warn, ok, activeCount: activeBreakdowns.length };
-  }, [downtimeByUnit, units.length, target, enriched, activeBreakdowns.length, now]);
+    const enrichedIds = new Set(enriched.map((e) => e.unit.id));
+    const activeCount = activeBreakdowns.filter((b) => enrichedIds.has(b.unit_id)).length;
+    return { stats, critical, warn, ok, activeCount };
+  }, [enriched, target, anchor, activeBreakdowns]);
 
   const openCreate = (unitId: string | null) => {
     setCreateUnitId(unitId);
@@ -125,7 +176,7 @@ function Dashboard() {
     }
   };
 
-  const monthLabel = now.toLocaleString(undefined, { month: "long", year: "numeric" });
+  const monthLabel = anchor.toLocaleString(undefined, { month: "long", year: "numeric" });
 
   return (
     <div className="min-h-screen bg-background">
@@ -157,10 +208,18 @@ function Dashboard() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setManageOpen(true)}
+              onClick={() => { setManageStartNew(false); setManageOpen(true); }}
               className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white"
             >
               <Wrench className="h-4 w-4 mr-1" /> Units
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setManageStartNew(true); setManageOpen(true); }}
+              className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white"
+            >
+              <PlusCircle className="h-4 w-4 mr-1" /> Register unit
             </Button>
             <Button size="sm" onClick={() => openCreate(null)} className="shadow-md shadow-primary/20">
               <Plus className="h-4 w-4 mr-1" /> New breakdown
@@ -170,10 +229,72 @@ function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-6 space-y-6">
+        {/* Filters strip */}
+        <section className="rounded-lg border bg-card p-3 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            <Filter className="h-3.5 w-3.5" /> View
+          </div>
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="h-9 w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                    {m.value === currentMonthKey ? " (current)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-muted-foreground" />
+            <Select value={classFilter} onValueChange={setClassFilter}>
+              <SelectTrigger className="h-9 w-[200px]">
+                <SelectValue placeholder="All classes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All classes ({units.length})</SelectItem>
+                {classes.map((c) => {
+                  const count = units.filter((u) => (u.notes ?? "") === c).length;
+                  return (
+                    <SelectItem key={c} value={c}>
+                      {c} ({count})
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+          {(classFilter !== "all" || !isCurrentMonth) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setClassFilter("all");
+                setSelectedMonth(currentMonthKey);
+              }}
+            >
+              Reset
+            </Button>
+          )}
+          <div className="ml-auto text-xs text-muted-foreground">
+            Showing <span className="font-semibold text-foreground">{enriched.length}</span>{" "}
+            of {units.length} unit{units.length === 1 ? "" : "s"}
+            {!isCurrentMonth && (
+              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
+                Historical view
+              </span>
+            )}
+          </div>
+        </section>
         {/* Fleet KPIs */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
-            label="Fleet PA (MTD)"
+            label={isCurrentMonth ? "Fleet PA (MTD)" : "Fleet PA"}
             value={formatPct(fleet.stats.paCurrent)}
             hint={`Target ${formatPct(target)}`}
             tone={paStatusLevel(fleet.stats.paCurrent, target)}
@@ -203,7 +324,7 @@ function Dashboard() {
         </section>
 
         {/* Active breakdowns strip */}
-        {activeBreakdowns.length > 0 && (
+        {isCurrentMonth && activeBreakdowns.length > 0 && (
           <section className="rounded-lg border bg-card overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2.5 border-b bg-destructive/5">
               <div className="flex items-center gap-2 text-sm font-semibold">
@@ -220,7 +341,7 @@ function Dashboard() {
             <div className="divide-y">
               {activeBreakdowns.map((b) => {
                 const u = units.find((x) => x.id === b.unit_id);
-                const el = elapsedHours(b.started_at, null, now);
+                const el = elapsedHours(b.started_at, null, anchor);
                 return (
                   <div key={b.id} className="flex items-center gap-3 px-4 py-3 flex-wrap">
                     <div className="min-w-0 flex-1">
@@ -288,7 +409,7 @@ function Dashboard() {
                 level={level}
                 open={open}
                 target={target}
-                now={now}
+                now={anchor}
                 onRegister={() => openCreate(unit.id)}
                 onUpdateOpen={() => open && setEditing(open)}
                 onFinishOpen={() => open && finishNow(open)}
@@ -313,7 +434,11 @@ function Dashboard() {
         mode="edit"
         breakdown={editing}
       />
-      <ManageUnitsDialog open={manageOpen} onOpenChange={setManageOpen} />
+      <ManageUnitsDialog
+        open={manageOpen}
+        onOpenChange={(v) => { setManageOpen(v); if (!v) setManageStartNew(false); }}
+        startInNew={manageStartNew}
+      />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
@@ -444,7 +569,7 @@ function UnitCard({
 
       <div className="mt-4">
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-          <span>Downtime budget</span>
+          <span>Remaining Downtime Allowed</span>
           <span className="font-mono tabular">
             {formatHours(stats.downtimeUsedHours)} / {formatHours(stats.maxAllowedDowntime)}
           </span>

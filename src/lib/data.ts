@@ -52,13 +52,12 @@ export function useSettings() {
   });
 }
 
-/** All breakdowns overlapping the current month (open OR finished this month). */
-export function useMonthBreakdowns() {
-  const { start, end } = monthBounds();
+/** All breakdowns overlapping the given month (open OR finished this month). */
+export function useMonthBreakdowns(anchor?: Date) {
+  const { start, end } = monthBounds(anchor);
   return useQuery({
     queryKey: ["breakdowns", "month", start.toISOString()],
     queryFn: async (): Promise<Breakdown[]> => {
-      // overlap: started_at < monthEnd AND (finished_at IS NULL OR finished_at >= monthStart)
       const { data, error } = await supabase
         .from("breakdowns")
         .select("id,unit_id,started_at,finished_at,notes")
