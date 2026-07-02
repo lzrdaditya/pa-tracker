@@ -150,15 +150,17 @@ function Dashboard() {
   }, [units, downtimeByUnit, target, q, openByUnit, anchor, classFilter]);
 
   const fleet = useMemo(() => {
-    const totalDown = Array.from(downtimeByUnit.values()).reduce((a, b) => a + b, 0);
-    const n = units.length || 1;
+    const totalDown = enriched.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
+    const n = enriched.length || 1;
     const avgDown = totalDown / n;
     const stats = computePA(avgDown, target, anchor);
     const critical = enriched.filter((e) => e.level === "bad").length;
     const warn = enriched.filter((e) => e.level === "warn").length;
     const ok = enriched.filter((e) => e.level === "ok").length;
-    return { stats, critical, warn, ok, activeCount: activeBreakdowns.length };
-  }, [downtimeByUnit, units.length, target, enriched, activeBreakdowns.length, anchor]);
+    const enrichedIds = new Set(enriched.map((e) => e.unit.id));
+    const activeCount = activeBreakdowns.filter((b) => enrichedIds.has(b.unit_id)).length;
+    return { stats, critical, warn, ok, activeCount };
+  }, [enriched, target, anchor, activeBreakdowns]);
 
   const openCreate = (unitId: string | null) => {
     setCreateUnitId(unitId);
