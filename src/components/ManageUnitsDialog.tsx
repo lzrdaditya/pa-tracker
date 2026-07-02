@@ -19,12 +19,12 @@ export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
 
   useEffect(() => {
     if (open && startInNew)
-      setEditing({ code: "", name: "", notes: "", mtbs_target_hours: 100, mttr_target_hours: 8 });
+      setEditing({ code: "", name: "", notes: "", mtbs_target_hours: 65, mttr_target_hours: 10 });
     if (!open) setEditing(null);
   }, [open, startInNew]);
 
   const startNew = () =>
-    setEditing({ code: "", name: "", notes: "", mtbs_target_hours: 100, mttr_target_hours: 8 });
+    setEditing({ code: "", name: "", notes: "", mtbs_target_hours: 65, mttr_target_hours: 10 });
 
   const submit = async () => {
     if (!editing) return;
@@ -35,8 +35,8 @@ export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
         code: editing.code.trim(),
         name: editing.name.trim(),
         notes: editing.notes ?? null,
-        mtbs_target_hours: Number(editing.mtbs_target_hours ?? 100),
-        mttr_target_hours: Number(editing.mttr_target_hours ?? 8),
+        mtbs_target_hours: Number(editing.mtbs_target_hours ?? 65),
+        mttr_target_hours: Number(editing.mttr_target_hours ?? 10),
       });
       toast.success("Unit saved");
       setEditing(null);
