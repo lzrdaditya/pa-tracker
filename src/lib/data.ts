@@ -7,7 +7,10 @@ export interface Unit {
   code: string;
   name: string;
   notes: string | null;
+  mtbs_target_hours: number;
+  mttr_target_hours: number;
 }
+
 
 export interface Breakdown {
   id: string;
