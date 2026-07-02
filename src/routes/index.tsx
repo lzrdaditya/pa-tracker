@@ -127,6 +127,17 @@ function Dashboard() {
     return map;
   }, [breakdowns, anchor]);
 
+  const stoppageCountByUnit = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const b of breakdowns) {
+      if (hoursInMonth(b.started_at, b.finished_at, anchor) > 0) {
+        map.set(b.unit_id, (map.get(b.unit_id) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [breakdowns, anchor]);
+
+
   const openByUnit = useMemo(() => {
     const map = new Map<string, Breakdown>();
     for (const b of breakdowns) if (!b.finished_at) map.set(b.unit_id, b);
