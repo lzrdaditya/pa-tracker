@@ -49,6 +49,8 @@ import {
   Filter,
   CalendarDays,
   PlusCircle,
+  Timer,
+  Gauge,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
