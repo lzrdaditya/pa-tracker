@@ -78,6 +78,50 @@ export function formatHoursOrDash(h: number | null) {
   return formatHours(h);
 }
 
+/** Max stoppages allowed given calendar hours, current downtime, MTBS target. */
+export function remainingStoppages(
+  elapsedCalHours: number,
+  downtime: number,
+  stoppages: number,
+  mtbsTarget: number,
+): number | null {
+  if (!mtbsTarget || mtbsTarget <= 0) return null;
+  const nMax = Math.floor((elapsedCalHours - downtime) / mtbsTarget);
+  return nMax - stoppages;
+}
+
+/** Remaining downtime headroom to keep MTTR ≤ target given current stoppage count. */
+export function remainingMttrBudget(
+  downtime: number,
+  stoppages: number,
+  mttrTarget: number,
+): number | null {
+  if (!mttrTarget || mttrTarget <= 0) return null;
+  if (stoppages <= 0) return null;
+  return mttrTarget * stoppages - downtime;
+}
+
+/** Max hours the next repair can take to keep MTTR on target. */
+export function maxHoursNextRepair(
+  downtime: number,
+  stoppages: number,
+  mttrTarget: number,
+): number | null {
+  if (!mttrTarget || mttrTarget <= 0) return null;
+  return mttrTarget * (stoppages + 1) - downtime;
+}
+
+export type BudgetTone = "ok" | "warn" | "bad";
+
+/** Traffic-light for a remaining budget value against its ceiling. */
+export function budgetStatus(remaining: number | null, ceiling: number): BudgetTone {
+  if (remaining === null || !isFinite(remaining)) return "ok";
+  if (remaining < 0) return "bad";
+  if (ceiling > 0 && remaining / ceiling < 0.2) return "warn";
+  return "ok";
+}
+
+
 
 export function formatPct(v: number) {
   return `${(v * 100).toFixed(2)}%`;

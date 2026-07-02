@@ -19,7 +19,12 @@ import {
   computeMTBS,
   computeMTTR,
   formatHoursOrDash,
+  remainingStoppages,
+  remainingMttrBudget,
+  maxHoursNextRepair,
+  budgetStatus,
 } from "@/lib/pa";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -164,9 +169,18 @@ function Dashboard() {
         const open = openByUnit.get(u.id) ?? null;
         const mtbs = computeMTBS(stats.elapsedCalHours, dt, stoppages);
         const mttr = computeMTTR(dt, stoppages);
-        return { unit: u, stats, level, open, stoppages, mtbs, mttr };
+        const remStop = remainingStoppages(
+          stats.elapsedCalHours,
+          dt,
+          stoppages,
+          u.mtbs_target_hours,
+        );
+        const remMttr = remainingMttrBudget(dt, stoppages, u.mttr_target_hours);
+        const maxNext = maxHoursNextRepair(dt, stoppages, u.mttr_target_hours);
+        return { unit: u, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext };
       });
   }, [units, downtimeByUnit, stoppageCountByUnit, target, q, openByUnit, anchor, classFilter]);
+
 
   const fleet = useMemo(() => {
     const totalDown = enriched.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
@@ -451,7 +465,7 @@ function Dashboard() {
           <EmptyState onAdd={() => setManageOpen(true)} />
         ) : (
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {enriched.map(({ unit, stats, level, open, stoppages, mtbs, mttr }) => (
+            {enriched.map(({ unit, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext }) => (
               <UnitCard
                 key={unit.id}
                 unit={unit}
@@ -463,12 +477,16 @@ function Dashboard() {
                 stoppages={stoppages}
                 mtbs={mtbs}
                 mttr={mttr}
+                remStop={remStop}
+                remMttr={remMttr}
+                maxNext={maxNext}
                 onRegister={() => openCreate(unit.id)}
                 onUpdateOpen={() => open && setEditing(open)}
                 onFinishOpen={() => open && finishNow(open)}
               />
             ))}
           </section>
+
         )}
       </main>
 
@@ -563,6 +581,9 @@ function UnitCard({
   stoppages,
   mtbs,
   mttr,
+  remStop,
+  remMttr,
+  maxNext,
   onRegister,
   onUpdateOpen,
   onFinishOpen,
@@ -576,10 +597,14 @@ function UnitCard({
   stoppages: number;
   mtbs: number | null;
   mttr: number | null;
+  remStop: number | null;
+  remMttr: number | null;
+  maxNext: number | null;
   onRegister: () => void;
   onUpdateOpen: () => void;
   onFinishOpen: () => void;
 }) {
+
   const t = toneClasses(level);
   const budgetPct = Math.min(
     100,
@@ -641,26 +666,61 @@ function UnitCard({
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded bg-muted/50 p-2">
-          <div className="text-muted-foreground">Cal time</div>
-          <div className="font-mono tabular font-semibold">{formatHours(stats.calTimeHours)}</div>
-        </div>
-        <div className="rounded bg-muted/50 p-2">
-          <div className="text-muted-foreground">EOM projected</div>
-          <div className="font-mono tabular font-semibold">{formatPct(stats.paMonthProjected)}</div>
-        </div>
-        <div className="rounded bg-muted/50 p-2">
           <div className="text-muted-foreground">MTBS</div>
           <div className="font-mono tabular font-semibold">{formatHoursOrDash(mtbs)}</div>
+          <div className="text-[10px] text-muted-foreground">target {formatHours(unit.mtbs_target_hours)}</div>
         </div>
         <div className="rounded bg-muted/50 p-2">
           <div className="text-muted-foreground">MTTR</div>
           <div className="font-mono tabular font-semibold">{formatHoursOrDash(mttr)}</div>
+          <div className="text-[10px] text-muted-foreground">target ≤ {formatHours(unit.mttr_target_hours)}</div>
         </div>
         <div className="rounded bg-muted/50 p-2 col-span-2">
           <div className="text-muted-foreground">Stoppages this period</div>
           <div className="font-mono tabular font-semibold">{stoppages}</div>
         </div>
       </div>
+
+      {/* Remaining reliability budgets */}
+      <div className="mt-3 rounded-md border bg-muted/20 p-3">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+          Remaining budget
+        </div>
+        <div className="grid gap-2 text-xs">
+          <BudgetRow
+            label="Stoppages allowed"
+            value={
+              remStop === null
+                ? "—"
+                : remStop >= 0
+                  ? `${remStop} more`
+                  : `${Math.abs(remStop)} over`
+            }
+            tone={budgetStatus(remStop, Math.max(1, (remStop ?? 0) + stoppages))}
+            hint="Before MTBS falls below target"
+          />
+          <BudgetRow
+            label="MTTR headroom"
+            value={
+              remMttr === null
+                ? "—"
+                : remMttr >= 0
+                  ? `+${formatHours(remMttr)}`
+                  : `−${formatHours(Math.abs(remMttr))}`
+            }
+            tone={budgetStatus(remMttr, Math.max(0.001, unit.mttr_target_hours * Math.max(1, stoppages)))}
+            hint={stoppages === 0 ? "No stoppages yet" : "Total repair-hour headroom"}
+          />
+          <BudgetRow
+            label="Next repair ≤"
+            value={maxNext === null ? "—" : maxNext >= 0 ? formatHours(maxNext) : "0h (breached)"}
+            tone={budgetStatus(maxNext, Math.max(0.001, unit.mttr_target_hours))}
+            hint="Max duration to stay on MTTR"
+          />
+        </div>
+      </div>
+
+
 
 
       <div className="mt-4 flex gap-2">
@@ -682,6 +742,30 @@ function UnitCard({
     </div>
   );
 }
+
+function BudgetRow({
+  label,
+  value,
+  tone,
+  hint,
+}: {
+  label: string;
+  value: string;
+  tone: Level;
+  hint?: string;
+}) {
+  const t = toneClasses(tone);
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-xs font-medium">{label}</div>
+        {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
+      </div>
+      <div className={`font-mono tabular text-sm font-bold ${t.text} whitespace-nowrap`}>{value}</div>
+    </div>
+  );
+}
+
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (

@@ -7,7 +7,10 @@ export interface Unit {
   code: string;
   name: string;
   notes: string | null;
+  mtbs_target_hours: number;
+  mttr_target_hours: number;
 }
+
 
 export interface Breakdown {
   id: string;
@@ -28,8 +31,9 @@ export function useUnits() {
     queryFn: async (): Promise<Unit[]> => {
       const { data, error } = await supabase
         .from("units")
-        .select("id,code,name,notes")
+        .select("id,code,name,notes,mtbs_target_hours,mttr_target_hours")
         .order("code");
+
       if (error) throw error;
       return data ?? [];
     },
@@ -135,23 +139,33 @@ export function useDeleteBreakdown() {
 export function useSaveUnit() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (u: { id?: string; code: string; name: string; notes?: string | null }) => {
+    mutationFn: async (u: {
+      id?: string;
+      code: string;
+      name: string;
+      notes?: string | null;
+      mtbs_target_hours?: number;
+      mttr_target_hours?: number;
+    }) => {
+      const payload = {
+        code: u.code,
+        name: u.name,
+        notes: u.notes ?? null,
+        ...(u.mtbs_target_hours !== undefined ? { mtbs_target_hours: u.mtbs_target_hours } : {}),
+        ...(u.mttr_target_hours !== undefined ? { mttr_target_hours: u.mttr_target_hours } : {}),
+      };
       if (u.id) {
-        const { error } = await supabase
-          .from("units")
-          .update({ code: u.code, name: u.name, notes: u.notes ?? null })
-          .eq("id", u.id);
+        const { error } = await supabase.from("units").update(payload).eq("id", u.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("units")
-          .insert({ code: u.code, name: u.name, notes: u.notes ?? null });
+        const { error } = await supabase.from("units").insert(payload);
         if (error) throw error;
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["units"] }),
   });
 }
+
 
 export function useDeleteUnit() {
   const qc = useQueryClient();
