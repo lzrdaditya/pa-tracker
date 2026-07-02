@@ -169,9 +169,18 @@ function Dashboard() {
         const open = openByUnit.get(u.id) ?? null;
         const mtbs = computeMTBS(stats.elapsedCalHours, dt, stoppages);
         const mttr = computeMTTR(dt, stoppages);
-        return { unit: u, stats, level, open, stoppages, mtbs, mttr };
+        const remStop = remainingStoppages(
+          stats.elapsedCalHours,
+          dt,
+          stoppages,
+          u.mtbs_target_hours,
+        );
+        const remMttr = remainingMttrBudget(dt, stoppages, u.mttr_target_hours);
+        const maxNext = maxHoursNextRepair(dt, stoppages, u.mttr_target_hours);
+        return { unit: u, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext };
       });
   }, [units, downtimeByUnit, stoppageCountByUnit, target, q, openByUnit, anchor, classFilter]);
+
 
   const fleet = useMemo(() => {
     const totalDown = enriched.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
