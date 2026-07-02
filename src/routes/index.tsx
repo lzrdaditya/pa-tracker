@@ -158,15 +158,19 @@ function Dashboard() {
       )
       .map((u) => {
         const dt = downtimeByUnit.get(u.id) ?? 0;
+        const stoppages = stoppageCountByUnit.get(u.id) ?? 0;
         const stats = computePA(dt, target, anchor);
         const level: Level = paStatusLevel(stats.paCurrent, target);
         const open = openByUnit.get(u.id) ?? null;
-        return { unit: u, stats, level, open };
+        const mtbs = computeMTBS(stats.elapsedCalHours, dt, stoppages);
+        const mttr = computeMTTR(dt, stoppages);
+        return { unit: u, stats, level, open, stoppages, mtbs, mttr };
       });
-  }, [units, downtimeByUnit, target, q, openByUnit, anchor, classFilter]);
+  }, [units, downtimeByUnit, stoppageCountByUnit, target, q, openByUnit, anchor, classFilter]);
 
   const fleet = useMemo(() => {
     const totalDown = enriched.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
+    const totalStoppages = enriched.reduce((a, e) => a + e.stoppages, 0);
     const n = enriched.length || 1;
     const avgDown = totalDown / n;
     const stats = computePA(avgDown, target, anchor);
@@ -175,8 +179,12 @@ function Dashboard() {
     const ok = enriched.filter((e) => e.level === "ok").length;
     const enrichedIds = new Set(enriched.map((e) => e.unit.id));
     const activeCount = activeBreakdowns.filter((b) => enrichedIds.has(b.unit_id)).length;
-    return { stats, critical, warn, ok, activeCount };
+    const totalReady = enriched.reduce((a, e) => a + e.stats.elapsedCalHours, 0);
+    const mtbs = computeMTBS(totalReady, totalDown, totalStoppages);
+    const mttr = computeMTTR(totalDown, totalStoppages);
+    return { stats, critical, warn, ok, activeCount, totalStoppages, mtbs, mttr };
   }, [enriched, target, anchor, activeBreakdowns]);
+
 
   const openCreate = (unitId: string | null) => {
     setCreateUnitId(unitId);
