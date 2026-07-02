@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,14 +8,19 @@ import { toast } from "sonner";
 import { useUnits, useSaveUnit, useDeleteUnit, type Unit } from "@/lib/data";
 import { Pencil, Trash2, Plus, X } from "lucide-react";
 
-interface Props { open: boolean; onOpenChange: (v: boolean) => void }
+interface Props { open: boolean; onOpenChange: (v: boolean) => void; startInNew?: boolean }
 
-export function ManageUnitsDialog({ open, onOpenChange }: Props) {
+export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
   const { data: units = [] } = useUnits();
   const save = useSaveUnit();
   const del = useDeleteUnit();
 
   const [editing, setEditing] = useState<Partial<Unit> | null>(null);
+
+  useEffect(() => {
+    if (open && startInNew) setEditing({ code: "", name: "", notes: "" });
+    if (!open) setEditing(null);
+  }, [open, startInNew]);
 
   const startNew = () => setEditing({ code: "", name: "", notes: "" });
 
