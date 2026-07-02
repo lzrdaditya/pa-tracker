@@ -648,7 +648,20 @@ function UnitCard({
           <div className="text-muted-foreground">EOM projected</div>
           <div className="font-mono tabular font-semibold">{formatPct(stats.paMonthProjected)}</div>
         </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">MTBS</div>
+          <div className="font-mono tabular font-semibold">{formatHoursOrDash(mtbs)}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">MTTR</div>
+          <div className="font-mono tabular font-semibold">{formatHoursOrDash(mttr)}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2 col-span-2">
+          <div className="text-muted-foreground">Stoppages this period</div>
+          <div className="font-mono tabular font-semibold">{stoppages}</div>
+        </div>
       </div>
+
 
       <div className="mt-4 flex gap-2">
         {open ? (
