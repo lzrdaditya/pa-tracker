@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   useUnits,
   useMonthBreakdowns,
@@ -199,6 +200,31 @@ function Dashboard() {
     return { stats, critical, warn, ok, activeCount, totalStoppages, mtbs, mttr };
   }, [enriched, target, anchor, activeBreakdowns]);
 
+  // Per-class aggregation for Main dashboard tab
+  const classSummaries = useMemo(() => {
+    const groups = new Map<string, typeof enriched>();
+    for (const e of enriched) {
+      const key = (e.unit.notes ?? "").trim() || "Unassigned";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(e);
+    }
+    return Array.from(groups.entries())
+      .map(([className, items]) => {
+        const totalDown = items.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
+        const totalStop = items.reduce((a, e) => a + e.stoppages, 0);
+        const totalReady = items.reduce((a, e) => a + e.stats.elapsedCalHours, 0);
+        const avgDown = totalDown / items.length;
+        const stats = computePA(avgDown, target, anchor);
+        const mtbs = computeMTBS(totalReady, totalDown, totalStop);
+        const mttr = computeMTTR(totalDown, totalStop);
+        const level = paStatusLevel(stats.paCurrent, target);
+        const down = items.filter((i) => i.open).length;
+        return { className, items, stats, mtbs, mttr, level, totalStop, down };
+      })
+      .sort((a, b) => a.className.localeCompare(b.className));
+  }, [enriched, target, anchor]);
+
+
 
   const openCreate = (unitId: string | null) => {
     setCreateUnitId(unitId);
@@ -329,64 +355,6 @@ function Dashboard() {
             )}
           </div>
         </section>
-        {/* Fleet KPIs */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard
-            label={isCurrentMonth ? "Fleet PA (MTD)" : "Fleet PA"}
-            value={formatPct(fleet.stats.paCurrent)}
-            hint={`Target ${formatPct(target)}`}
-            tone={paStatusLevel(fleet.stats.paCurrent, target)}
-            icon={<TrendingUp className="h-4 w-4" />}
-          />
-          <KpiCard
-            label="Running breakdowns"
-            value={`${fleet.activeCount}`}
-            hint={fleet.activeCount === 0 ? "All units up" : "Awaiting finish"}
-            tone={fleet.activeCount === 0 ? "ok" : "warn"}
-            icon={<CircleDot className="h-4 w-4" />}
-          />
-          <KpiCard
-            label="Units at target"
-            value={`${fleet.ok}/${units.length || 0}`}
-            hint="Green units"
-            tone="ok"
-            icon={<CheckCircle2 className="h-4 w-4" />}
-          />
-          <KpiCard
-            label="Below target"
-            value={`${fleet.critical}`}
-            hint={`${fleet.warn} in warning`}
-            tone={fleet.critical > 0 ? "bad" : fleet.warn > 0 ? "warn" : "ok"}
-            icon={<AlertTriangle className="h-4 w-4" />}
-          />
-        </section>
-
-        {/* Reliability KPIs */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard
-            label="MTBS (Fleet)"
-            value={formatHoursOrDash(fleet.mtbs)}
-            hint="Mean time between stoppage"
-            tone="ok"
-            icon={<Gauge className="h-4 w-4" />}
-          />
-          <KpiCard
-            label="MTTR (Fleet)"
-            value={formatHoursOrDash(fleet.mttr)}
-            hint="Mean time to repair"
-            tone={fleet.mttr !== null && fleet.mttr > 8 ? "warn" : "ok"}
-            icon={<Timer className="h-4 w-4" />}
-          />
-          <KpiCard
-            label="Stoppages"
-            value={`${fleet.totalStoppages}`}
-            hint="Recorded this period"
-            tone={fleet.totalStoppages === 0 ? "ok" : "warn"}
-            icon={<AlertTriangle className="h-4 w-4" />}
-          />
-        </section>
-
-
         {/* Active breakdowns strip */}
         {isCurrentMonth && activeBreakdowns.length > 0 && (
           <section className="rounded-lg border bg-card overflow-hidden">
@@ -438,57 +406,207 @@ function Dashboard() {
           </section>
         )}
 
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search unit code or name"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {enriched.length} unit{enriched.length === 1 ? "" : "s"} · month:{" "}
-            <span className="font-mono">
-              {fleet.stats.dayOfMonth}/{fleet.stats.daysInMonth}
-            </span>{" "}
-            days
-          </div>
-        </div>
+        {/* Views */}
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="overview">Main dashboard</TabsTrigger>
+            <TabsTrigger value="list">List view</TabsTrigger>
+            <TabsTrigger value="detail">Detailed view</TabsTrigger>
+          </TabsList>
 
-        {/* Units */}
-        {unitsLoading ? (
-          <div className="text-center py-16 text-muted-foreground">Loading...</div>
-        ) : units.length === 0 ? (
-          <EmptyState onAdd={() => setManageOpen(true)} />
-        ) : (
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {enriched.map(({ unit, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext }) => (
-              <UnitCard
-                key={unit.id}
-                unit={unit}
-                stats={stats}
-                level={level}
-                open={open}
-                target={target}
-                now={anchor}
-                stoppages={stoppages}
-                mtbs={mtbs}
-                mttr={mttr}
-                remStop={remStop}
-                remMttr={remMttr}
-                maxNext={maxNext}
-                onRegister={() => openCreate(unit.id)}
-                onUpdateOpen={() => open && setEditing(open)}
-                onFinishOpen={() => open && finishNow(open)}
+          {/* Main dashboard: fleet KPIs + per-class summaries */}
+          <TabsContent value="overview" className="space-y-6">
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <KpiCard
+                label={isCurrentMonth ? "Fleet PA (MTD)" : "Fleet PA"}
+                value={formatPct(fleet.stats.paCurrent)}
+                hint={`Target ${formatPct(target)}`}
+                tone={paStatusLevel(fleet.stats.paCurrent, target)}
+                icon={<TrendingUp className="h-4 w-4" />}
               />
-            ))}
-          </section>
+              <KpiCard
+                label="Running breakdowns"
+                value={`${fleet.activeCount}`}
+                hint={fleet.activeCount === 0 ? "All units up" : "Awaiting finish"}
+                tone={fleet.activeCount === 0 ? "ok" : "warn"}
+                icon={<CircleDot className="h-4 w-4" />}
+              />
+              <KpiCard
+                label="Units at target"
+                value={`${fleet.ok}/${units.length || 0}`}
+                hint="Green units"
+                tone="ok"
+                icon={<CheckCircle2 className="h-4 w-4" />}
+              />
+              <KpiCard
+                label="Below target"
+                value={`${fleet.critical}`}
+                hint={`${fleet.warn} in warning`}
+                tone={fleet.critical > 0 ? "bad" : fleet.warn > 0 ? "warn" : "ok"}
+                icon={<AlertTriangle className="h-4 w-4" />}
+              />
+            </section>
 
-        )}
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <KpiCard
+                label="MTBS (Fleet)"
+                value={formatHoursOrDash(fleet.mtbs)}
+                hint={`Target ≥ ${formatHours(settings?.mtbs_target_hours ?? 65)}`}
+                tone={
+                  fleet.mtbs === null
+                    ? "ok"
+                    : fleet.mtbs >= (settings?.mtbs_target_hours ?? 65)
+                      ? "ok"
+                      : "warn"
+                }
+                icon={<Gauge className="h-4 w-4" />}
+              />
+              <KpiCard
+                label="MTTR (Fleet)"
+                value={formatHoursOrDash(fleet.mttr)}
+                hint={`Target ≤ ${formatHours(settings?.mttr_target_hours ?? 10)}`}
+                tone={
+                  fleet.mttr === null
+                    ? "ok"
+                    : fleet.mttr <= (settings?.mttr_target_hours ?? 10)
+                      ? "ok"
+                      : "warn"
+                }
+                icon={<Timer className="h-4 w-4" />}
+              />
+              <KpiCard
+                label="Stoppages"
+                value={`${fleet.totalStoppages}`}
+                hint="Recorded this period"
+                tone={fleet.totalStoppages === 0 ? "ok" : "warn"}
+                icon={<AlertTriangle className="h-4 w-4" />}
+              />
+            </section>
+
+            <section>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+                Summary by class
+              </div>
+              {classSummaries.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  No units in this view.
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {classSummaries.map((c) => (
+                    <ClassSummaryCard
+                      key={c.className}
+                      name={c.className}
+                      unitCount={c.items.length}
+                      down={c.down}
+                      pa={c.stats.paCurrent}
+                      target={target}
+                      mtbs={c.mtbs}
+                      mttr={c.mttr}
+                      mtbsTarget={settings?.mtbs_target_hours ?? 65}
+                      mttrTarget={settings?.mttr_target_hours ?? 10}
+                      stoppages={c.totalStop}
+                      level={c.level}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </TabsContent>
+
+          {/* List view */}
+          <TabsContent value="list" className="space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[220px] max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search unit code or name"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {enriched.length} unit{enriched.length === 1 ? "" : "s"}
+              </div>
+            </div>
+
+            {unitsLoading ? (
+              <div className="text-center py-16 text-muted-foreground">Loading...</div>
+            ) : enriched.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                No units to show.
+              </div>
+            ) : (
+              <div className="rounded-lg border bg-card overflow-hidden divide-y">
+                {enriched.map((e) => (
+                  <ListRow
+                    key={e.unit.id}
+                    unit={e.unit}
+                    stats={e.stats}
+                    level={e.level}
+                    open={e.open}
+                    target={target}
+                    onRegister={() => openCreate(e.unit.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Detailed view (current cards) */}
+          <TabsContent value="detail" className="space-y-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[220px] max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search unit code or name"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {enriched.length} unit{enriched.length === 1 ? "" : "s"} · month:{" "}
+                <span className="font-mono">
+                  {fleet.stats.dayOfMonth}/{fleet.stats.daysInMonth}
+                </span>{" "}
+                days
+              </div>
+            </div>
+
+            {unitsLoading ? (
+              <div className="text-center py-16 text-muted-foreground">Loading...</div>
+            ) : units.length === 0 ? (
+              <EmptyState onAdd={() => setManageOpen(true)} />
+            ) : (
+              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {enriched.map(({ unit, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext }) => (
+                  <UnitCard
+                    key={unit.id}
+                    unit={unit}
+                    stats={stats}
+                    level={level}
+                    open={open}
+                    target={target}
+                    now={anchor}
+                    stoppages={stoppages}
+                    mtbs={mtbs}
+                    mttr={mttr}
+                    remStop={remStop}
+                    remMttr={remMttr}
+                    maxNext={maxNext}
+                    onRegister={() => openCreate(unit.id)}
+                    onUpdateOpen={() => open && setEditing(open)}
+                    onFinishOpen={() => open && finishNow(open)}
+                  />
+                ))}
+              </section>
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
+
 
       <BreakdownDialog
         open={createOpen}
@@ -778,6 +896,158 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       <Button className="mt-4" onClick={onAdd}>
         <Plus className="h-4 w-4 mr-1" /> Add your first unit
       </Button>
+    </div>
+  );
+}
+
+function ClassSummaryCard({
+  name,
+  unitCount,
+  down,
+  pa,
+  target,
+  mtbs,
+  mttr,
+  mtbsTarget,
+  mttrTarget,
+  stoppages,
+  level,
+}: {
+  name: string;
+  unitCount: number;
+  down: number;
+  pa: number;
+  target: number;
+  mtbs: number | null;
+  mttr: number | null;
+  mtbsTarget: number;
+  mttrTarget: number;
+  stoppages: number;
+  level: Level;
+}) {
+  const t = toneClasses(level);
+  return (
+    <div className={`relative rounded-lg border bg-card p-4 shadow-sm ring-1 ${t.ring} before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 ${t.accent}`}>
+      <div className="flex items-start justify-between gap-2 pl-2">
+        <div className="min-w-0">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">Class</div>
+          <div className="text-base font-semibold truncate">{name}</div>
+        </div>
+        <span className={`text-[10px] font-semibold px-2 py-1 rounded ${t.chip} uppercase tracking-wider whitespace-nowrap`}>
+          {unitCount} unit{unitCount === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="mt-3 pl-2 flex items-baseline gap-2">
+        <div className={`font-mono tabular text-3xl font-bold ${t.text}`}>{formatPct(pa)}</div>
+        <div className="text-xs text-muted-foreground">PA · goal {formatPct(target)}</div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs pl-2">
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">MTBS</div>
+          <div className="font-mono tabular font-semibold">{formatHoursOrDash(mtbs)}</div>
+          <div className="text-[10px] text-muted-foreground">target ≥ {formatHours(mtbsTarget)}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">MTTR</div>
+          <div className="font-mono tabular font-semibold">{formatHoursOrDash(mttr)}</div>
+          <div className="text-[10px] text-muted-foreground">target ≤ {formatHours(mttrTarget)}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">Stoppages</div>
+          <div className="font-mono tabular font-semibold">{stoppages}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">Currently down</div>
+          <div className={`font-mono tabular font-semibold ${down > 0 ? "text-destructive" : ""}`}>{down}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ListRow({
+  unit,
+  stats,
+  level,
+  open,
+  target,
+  onRegister,
+}: {
+  unit: Unit;
+  stats: ReturnType<typeof computePA>;
+  level: Level;
+  open: Breakdown | null;
+  target: number;
+  onRegister: () => void;
+}) {
+  const max = Math.max(0.001, stats.maxAllowedDowntime);
+  const usedPct = Math.min(100, Math.max(0, (stats.downtimeUsedHours / max) * 100));
+  const remaining = stats.remainingAllowedDowntime;
+  const remainingPct = Math.max(0, 100 - usedPct);
+
+  // Warning tier per user request: high / low / empty remaining downtime
+  let tier: "high" | "low" | "empty";
+  if (remaining <= 0) tier = "empty";
+  else if (remainingPct < 25) tier = "low";
+  else tier = "high";
+
+  const tierChip =
+    tier === "high"
+      ? "bg-success/10 text-success"
+      : tier === "low"
+        ? "bg-warning/20 text-[oklch(0.4_0.12_75)]"
+        : "bg-destructive/10 text-destructive";
+  const barColor =
+    tier === "high" ? "bg-success" : tier === "low" ? "bg-warning" : "bg-destructive";
+  const tierLabel =
+    tier === "high" ? "Healthy" : tier === "low" ? "Low headroom" : "Budget spent";
+
+  return (
+    <div className="flex items-center gap-4 px-4 py-3 flex-wrap">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-xs text-muted-foreground">{unit.code}</span>
+          <span className="font-semibold truncate">{unit.name}</span>
+          {open && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-destructive uppercase">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-60" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-destructive" />
+              </span>
+              Down
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-muted-foreground mt-0.5">
+          PA {formatPct(stats.paCurrent)} · goal {formatPct(target)} · used{" "}
+          {formatHours(stats.downtimeUsedHours)} / {formatHours(stats.maxAllowedDowntime)}
+        </div>
+      </div>
+
+      <div className="w-full sm:w-[280px]">
+        <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+          <div className={`h-full ${barColor} transition-all`} style={{ width: `${usedPct}%` }} />
+        </div>
+        <div className="mt-1 flex items-center justify-between text-[11px]">
+          <span className="text-muted-foreground">{usedPct.toFixed(0)}% used</span>
+          <span className={`font-mono tabular font-semibold ${tier === "empty" ? "text-destructive" : tier === "low" ? "text-[oklch(0.4_0.12_75)]" : "text-success"}`}>
+            {remaining >= 0
+              ? `${formatHours(remaining)} left`
+              : `${formatHours(Math.abs(remaining))} over`}
+          </span>
+        </div>
+      </div>
+
+      <span className={`text-[10px] font-semibold px-2 py-1 rounded ${tierChip} uppercase tracking-wider whitespace-nowrap`}>
+        {tierLabel}
+      </span>
+
+      <Button size="sm" variant="outline" onClick={onRegister}>
+        <Plus className="h-3.5 w-3.5 mr-1" /> Log
+      </Button>
+
+      {/* silence unused level warning */}
+      <span className="hidden">{level}</span>
     </div>
   );
 }

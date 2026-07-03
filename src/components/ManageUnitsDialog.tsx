@@ -5,26 +5,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { useUnits, useSaveUnit, useDeleteUnit, type Unit } from "@/lib/data";
+import { useUnits, useSaveUnit, useDeleteUnit, useSettings, type Unit } from "@/lib/data";
 import { Pencil, Trash2, Plus, X } from "lucide-react";
 
 interface Props { open: boolean; onOpenChange: (v: boolean) => void; startInNew?: boolean }
 
 export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
   const { data: units = [] } = useUnits();
+  const { data: settings } = useSettings();
   const save = useSaveUnit();
   const del = useDeleteUnit();
+
+  const defMtbs = settings?.mtbs_target_hours ?? 65;
+  const defMttr = settings?.mttr_target_hours ?? 10;
 
   const [editing, setEditing] = useState<Partial<Unit> | null>(null);
 
   useEffect(() => {
     if (open && startInNew)
-      setEditing({ code: "", name: "", notes: "", mtbs_target_hours: 65, mttr_target_hours: 10 });
+      setEditing({ code: "", name: "", notes: "", mtbs_target_hours: defMtbs, mttr_target_hours: defMttr });
     if (!open) setEditing(null);
-  }, [open, startInNew]);
+  }, [open, startInNew, defMtbs, defMttr]);
 
   const startNew = () =>
-    setEditing({ code: "", name: "", notes: "", mtbs_target_hours: 65, mttr_target_hours: 10 });
+    setEditing({ code: "", name: "", notes: "", mtbs_target_hours: defMtbs, mttr_target_hours: defMttr });
 
   const submit = async () => {
     if (!editing) return;
@@ -35,8 +39,8 @@ export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
         code: editing.code.trim(),
         name: editing.name.trim(),
         notes: editing.notes ?? null,
-        mtbs_target_hours: Number(editing.mtbs_target_hours ?? 65),
-        mttr_target_hours: Number(editing.mttr_target_hours ?? 10),
+        mtbs_target_hours: Number(editing.mtbs_target_hours ?? defMtbs),
+        mttr_target_hours: Number(editing.mttr_target_hours ?? defMttr),
       });
       toast.success("Unit saved");
       setEditing(null);
