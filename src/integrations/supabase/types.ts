@@ -17,16 +17,22 @@ export type Database = {
       app_settings: {
         Row: {
           id: number
+          mtbs_target_hours: number
+          mttr_target_hours: number
           pa_target: number
           updated_at: string
         }
         Insert: {
           id?: number
+          mtbs_target_hours?: number
+          mttr_target_hours?: number
           pa_target?: number
           updated_at?: string
         }
         Update: {
           id?: number
+          mtbs_target_hours?: number
+          mttr_target_hours?: number
           pa_target?: number
           updated_at?: string
         }
