@@ -900,5 +900,157 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
   );
 }
 
+function ClassSummaryCard({
+  name,
+  unitCount,
+  down,
+  pa,
+  target,
+  mtbs,
+  mttr,
+  mtbsTarget,
+  mttrTarget,
+  stoppages,
+  level,
+}: {
+  name: string;
+  unitCount: number;
+  down: number;
+  pa: number;
+  target: number;
+  mtbs: number | null;
+  mttr: number | null;
+  mtbsTarget: number;
+  mttrTarget: number;
+  stoppages: number;
+  level: Level;
+}) {
+  const t = toneClasses(level);
+  return (
+    <div className={`relative rounded-lg border bg-card p-4 shadow-sm ring-1 ${t.ring} before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 ${t.accent}`}>
+      <div className="flex items-start justify-between gap-2 pl-2">
+        <div className="min-w-0">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">Class</div>
+          <div className="text-base font-semibold truncate">{name}</div>
+        </div>
+        <span className={`text-[10px] font-semibold px-2 py-1 rounded ${t.chip} uppercase tracking-wider whitespace-nowrap`}>
+          {unitCount} unit{unitCount === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="mt-3 pl-2 flex items-baseline gap-2">
+        <div className={`font-mono tabular text-3xl font-bold ${t.text}`}>{formatPct(pa)}</div>
+        <div className="text-xs text-muted-foreground">PA · goal {formatPct(target)}</div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs pl-2">
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">MTBS</div>
+          <div className="font-mono tabular font-semibold">{formatHoursOrDash(mtbs)}</div>
+          <div className="text-[10px] text-muted-foreground">target ≥ {formatHours(mtbsTarget)}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">MTTR</div>
+          <div className="font-mono tabular font-semibold">{formatHoursOrDash(mttr)}</div>
+          <div className="text-[10px] text-muted-foreground">target ≤ {formatHours(mttrTarget)}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">Stoppages</div>
+          <div className="font-mono tabular font-semibold">{stoppages}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground">Currently down</div>
+          <div className={`font-mono tabular font-semibold ${down > 0 ? "text-destructive" : ""}`}>{down}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ListRow({
+  unit,
+  stats,
+  level,
+  open,
+  target,
+  onRegister,
+}: {
+  unit: Unit;
+  stats: ReturnType<typeof computePA>;
+  level: Level;
+  open: Breakdown | null;
+  target: number;
+  onRegister: () => void;
+}) {
+  const max = Math.max(0.001, stats.maxAllowedDowntime);
+  const usedPct = Math.min(100, Math.max(0, (stats.downtimeUsedHours / max) * 100));
+  const remaining = stats.remainingAllowedDowntime;
+  const remainingPct = Math.max(0, 100 - usedPct);
+
+  // Warning tier per user request: high / low / empty remaining downtime
+  let tier: "high" | "low" | "empty";
+  if (remaining <= 0) tier = "empty";
+  else if (remainingPct < 25) tier = "low";
+  else tier = "high";
+
+  const tierChip =
+    tier === "high"
+      ? "bg-success/10 text-success"
+      : tier === "low"
+        ? "bg-warning/20 text-[oklch(0.4_0.12_75)]"
+        : "bg-destructive/10 text-destructive";
+  const barColor =
+    tier === "high" ? "bg-success" : tier === "low" ? "bg-warning" : "bg-destructive";
+  const tierLabel =
+    tier === "high" ? "Healthy" : tier === "low" ? "Low headroom" : "Budget spent";
+
+  return (
+    <div className="flex items-center gap-4 px-4 py-3 flex-wrap">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-xs text-muted-foreground">{unit.code}</span>
+          <span className="font-semibold truncate">{unit.name}</span>
+          {open && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-destructive uppercase">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-60" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-destructive" />
+              </span>
+              Down
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-muted-foreground mt-0.5">
+          PA {formatPct(stats.paCurrent)} · goal {formatPct(target)} · used{" "}
+          {formatHours(stats.downtimeUsedHours)} / {formatHours(stats.maxAllowedDowntime)}
+        </div>
+      </div>
+
+      <div className="w-full sm:w-[280px]">
+        <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+          <div className={`h-full ${barColor} transition-all`} style={{ width: `${usedPct}%` }} />
+        </div>
+        <div className="mt-1 flex items-center justify-between text-[11px]">
+          <span className="text-muted-foreground">{usedPct.toFixed(0)}% used</span>
+          <span className={`font-mono tabular font-semibold ${tier === "empty" ? "text-destructive" : tier === "low" ? "text-[oklch(0.4_0.12_75)]" : "text-success"}`}>
+            {remaining >= 0
+              ? `${formatHours(remaining)} left`
+              : `${formatHours(Math.abs(remaining))} over`}
+          </span>
+        </div>
+      </div>
+
+      <span className={`text-[10px] font-semibold px-2 py-1 rounded ${tierChip} uppercase tracking-wider whitespace-nowrap`}>
+        {tierLabel}
+      </span>
+
+      <Button size="sm" variant="outline" onClick={onRegister}>
+        <Plus className="h-3.5 w-3.5 mr-1" /> Log
+      </Button>
+
+      {/* silence unused level warning */}
+      <span className="hidden">{level}</span>
+    </div>
+  );
+}
+
 // keep imported for tree-shake safety
 void Activity;
