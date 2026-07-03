@@ -355,64 +355,6 @@ function Dashboard() {
             )}
           </div>
         </section>
-        {/* Fleet KPIs */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard
-            label={isCurrentMonth ? "Fleet PA (MTD)" : "Fleet PA"}
-            value={formatPct(fleet.stats.paCurrent)}
-            hint={`Target ${formatPct(target)}`}
-            tone={paStatusLevel(fleet.stats.paCurrent, target)}
-            icon={<TrendingUp className="h-4 w-4" />}
-          />
-          <KpiCard
-            label="Running breakdowns"
-            value={`${fleet.activeCount}`}
-            hint={fleet.activeCount === 0 ? "All units up" : "Awaiting finish"}
-            tone={fleet.activeCount === 0 ? "ok" : "warn"}
-            icon={<CircleDot className="h-4 w-4" />}
-          />
-          <KpiCard
-            label="Units at target"
-            value={`${fleet.ok}/${units.length || 0}`}
-            hint="Green units"
-            tone="ok"
-            icon={<CheckCircle2 className="h-4 w-4" />}
-          />
-          <KpiCard
-            label="Below target"
-            value={`${fleet.critical}`}
-            hint={`${fleet.warn} in warning`}
-            tone={fleet.critical > 0 ? "bad" : fleet.warn > 0 ? "warn" : "ok"}
-            icon={<AlertTriangle className="h-4 w-4" />}
-          />
-        </section>
-
-        {/* Reliability KPIs */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard
-            label="MTBS (Fleet)"
-            value={formatHoursOrDash(fleet.mtbs)}
-            hint="Mean time between stoppage"
-            tone="ok"
-            icon={<Gauge className="h-4 w-4" />}
-          />
-          <KpiCard
-            label="MTTR (Fleet)"
-            value={formatHoursOrDash(fleet.mttr)}
-            hint="Mean time to repair"
-            tone={fleet.mttr !== null && fleet.mttr > 8 ? "warn" : "ok"}
-            icon={<Timer className="h-4 w-4" />}
-          />
-          <KpiCard
-            label="Stoppages"
-            value={`${fleet.totalStoppages}`}
-            hint="Recorded this period"
-            tone={fleet.totalStoppages === 0 ? "ok" : "warn"}
-            icon={<AlertTriangle className="h-4 w-4" />}
-          />
-        </section>
-
-
         {/* Active breakdowns strip */}
         {isCurrentMonth && activeBreakdowns.length > 0 && (
           <section className="rounded-lg border bg-card overflow-hidden">
@@ -464,57 +406,207 @@ function Dashboard() {
           </section>
         )}
 
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search unit code or name"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {enriched.length} unit{enriched.length === 1 ? "" : "s"} · month:{" "}
-            <span className="font-mono">
-              {fleet.stats.dayOfMonth}/{fleet.stats.daysInMonth}
-            </span>{" "}
-            days
-          </div>
-        </div>
+        {/* Views */}
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="overview">Main dashboard</TabsTrigger>
+            <TabsTrigger value="list">List view</TabsTrigger>
+            <TabsTrigger value="detail">Detailed view</TabsTrigger>
+          </TabsList>
 
-        {/* Units */}
-        {unitsLoading ? (
-          <div className="text-center py-16 text-muted-foreground">Loading...</div>
-        ) : units.length === 0 ? (
-          <EmptyState onAdd={() => setManageOpen(true)} />
-        ) : (
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {enriched.map(({ unit, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext }) => (
-              <UnitCard
-                key={unit.id}
-                unit={unit}
-                stats={stats}
-                level={level}
-                open={open}
-                target={target}
-                now={anchor}
-                stoppages={stoppages}
-                mtbs={mtbs}
-                mttr={mttr}
-                remStop={remStop}
-                remMttr={remMttr}
-                maxNext={maxNext}
-                onRegister={() => openCreate(unit.id)}
-                onUpdateOpen={() => open && setEditing(open)}
-                onFinishOpen={() => open && finishNow(open)}
+          {/* Main dashboard: fleet KPIs + per-class summaries */}
+          <TabsContent value="overview" className="space-y-6">
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <KpiCard
+                label={isCurrentMonth ? "Fleet PA (MTD)" : "Fleet PA"}
+                value={formatPct(fleet.stats.paCurrent)}
+                hint={`Target ${formatPct(target)}`}
+                tone={paStatusLevel(fleet.stats.paCurrent, target)}
+                icon={<TrendingUp className="h-4 w-4" />}
               />
-            ))}
-          </section>
+              <KpiCard
+                label="Running breakdowns"
+                value={`${fleet.activeCount}`}
+                hint={fleet.activeCount === 0 ? "All units up" : "Awaiting finish"}
+                tone={fleet.activeCount === 0 ? "ok" : "warn"}
+                icon={<CircleDot className="h-4 w-4" />}
+              />
+              <KpiCard
+                label="Units at target"
+                value={`${fleet.ok}/${units.length || 0}`}
+                hint="Green units"
+                tone="ok"
+                icon={<CheckCircle2 className="h-4 w-4" />}
+              />
+              <KpiCard
+                label="Below target"
+                value={`${fleet.critical}`}
+                hint={`${fleet.warn} in warning`}
+                tone={fleet.critical > 0 ? "bad" : fleet.warn > 0 ? "warn" : "ok"}
+                icon={<AlertTriangle className="h-4 w-4" />}
+              />
+            </section>
 
-        )}
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <KpiCard
+                label="MTBS (Fleet)"
+                value={formatHoursOrDash(fleet.mtbs)}
+                hint={`Target ≥ ${formatHours(settings?.mtbs_target_hours ?? 65)}`}
+                tone={
+                  fleet.mtbs === null
+                    ? "ok"
+                    : fleet.mtbs >= (settings?.mtbs_target_hours ?? 65)
+                      ? "ok"
+                      : "warn"
+                }
+                icon={<Gauge className="h-4 w-4" />}
+              />
+              <KpiCard
+                label="MTTR (Fleet)"
+                value={formatHoursOrDash(fleet.mttr)}
+                hint={`Target ≤ ${formatHours(settings?.mttr_target_hours ?? 10)}`}
+                tone={
+                  fleet.mttr === null
+                    ? "ok"
+                    : fleet.mttr <= (settings?.mttr_target_hours ?? 10)
+                      ? "ok"
+                      : "warn"
+                }
+                icon={<Timer className="h-4 w-4" />}
+              />
+              <KpiCard
+                label="Stoppages"
+                value={`${fleet.totalStoppages}`}
+                hint="Recorded this period"
+                tone={fleet.totalStoppages === 0 ? "ok" : "warn"}
+                icon={<AlertTriangle className="h-4 w-4" />}
+              />
+            </section>
+
+            <section>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+                Summary by class
+              </div>
+              {classSummaries.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  No units in this view.
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {classSummaries.map((c) => (
+                    <ClassSummaryCard
+                      key={c.className}
+                      name={c.className}
+                      unitCount={c.items.length}
+                      down={c.down}
+                      pa={c.stats.paCurrent}
+                      target={target}
+                      mtbs={c.mtbs}
+                      mttr={c.mttr}
+                      mtbsTarget={settings?.mtbs_target_hours ?? 65}
+                      mttrTarget={settings?.mttr_target_hours ?? 10}
+                      stoppages={c.totalStop}
+                      level={c.level}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </TabsContent>
+
+          {/* List view */}
+          <TabsContent value="list" className="space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[220px] max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search unit code or name"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {enriched.length} unit{enriched.length === 1 ? "" : "s"}
+              </div>
+            </div>
+
+            {unitsLoading ? (
+              <div className="text-center py-16 text-muted-foreground">Loading...</div>
+            ) : enriched.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                No units to show.
+              </div>
+            ) : (
+              <div className="rounded-lg border bg-card overflow-hidden divide-y">
+                {enriched.map((e) => (
+                  <ListRow
+                    key={e.unit.id}
+                    unit={e.unit}
+                    stats={e.stats}
+                    level={e.level}
+                    open={e.open}
+                    target={target}
+                    onRegister={() => openCreate(e.unit.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Detailed view (current cards) */}
+          <TabsContent value="detail" className="space-y-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[220px] max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search unit code or name"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {enriched.length} unit{enriched.length === 1 ? "" : "s"} · month:{" "}
+                <span className="font-mono">
+                  {fleet.stats.dayOfMonth}/{fleet.stats.daysInMonth}
+                </span>{" "}
+                days
+              </div>
+            </div>
+
+            {unitsLoading ? (
+              <div className="text-center py-16 text-muted-foreground">Loading...</div>
+            ) : units.length === 0 ? (
+              <EmptyState onAdd={() => setManageOpen(true)} />
+            ) : (
+              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {enriched.map(({ unit, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext }) => (
+                  <UnitCard
+                    key={unit.id}
+                    unit={unit}
+                    stats={stats}
+                    level={level}
+                    open={open}
+                    target={target}
+                    now={anchor}
+                    stoppages={stoppages}
+                    mtbs={mtbs}
+                    mttr={mttr}
+                    remStop={remStop}
+                    remMttr={remMttr}
+                    maxNext={maxNext}
+                    onRegister={() => openCreate(unit.id)}
+                    onUpdateOpen={() => open && setEditing(open)}
+                    onFinishOpen={() => open && finishNow(open)}
+                  />
+                ))}
+              </section>
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
+
 
       <BreakdownDialog
         open={createOpen}
