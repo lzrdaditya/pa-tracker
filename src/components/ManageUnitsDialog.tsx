@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { useUnits, useSaveUnit, useDeleteUnit, type Unit } from "@/lib/data";
+import { useUnits, useSaveUnit, useDeleteUnit, useSettings, type Unit } from "@/lib/data";
 import { Pencil, Trash2, Plus, X } from "lucide-react";
 
 interface Props { open: boolean; onOpenChange: (v: boolean) => void; startInNew?: boolean }
