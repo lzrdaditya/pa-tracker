@@ -23,6 +23,8 @@ export interface Breakdown {
 export interface Settings {
   id: number;
   pa_target: number;
+  mtbs_target_hours: number;
+  mttr_target_hours: number;
 }
 
 export function useUnits() {
