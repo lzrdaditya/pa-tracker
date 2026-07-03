@@ -200,6 +200,31 @@ function Dashboard() {
     return { stats, critical, warn, ok, activeCount, totalStoppages, mtbs, mttr };
   }, [enriched, target, anchor, activeBreakdowns]);
 
+  // Per-class aggregation for Main dashboard tab
+  const classSummaries = useMemo(() => {
+    const groups = new Map<string, typeof enriched>();
+    for (const e of enriched) {
+      const key = (e.unit.notes ?? "").trim() || "Unassigned";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(e);
+    }
+    return Array.from(groups.entries())
+      .map(([className, items]) => {
+        const totalDown = items.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
+        const totalStop = items.reduce((a, e) => a + e.stoppages, 0);
+        const totalReady = items.reduce((a, e) => a + e.stats.elapsedCalHours, 0);
+        const avgDown = totalDown / items.length;
+        const stats = computePA(avgDown, target, anchor);
+        const mtbs = computeMTBS(totalReady, totalDown, totalStop);
+        const mttr = computeMTTR(totalDown, totalStop);
+        const level = paStatusLevel(stats.paCurrent, target);
+        const down = items.filter((i) => i.open).length;
+        return { className, items, stats, mtbs, mttr, level, totalStop, down };
+      })
+      .sort((a, b) => a.className.localeCompare(b.className));
+  }, [enriched, target, anchor]);
+
+
 
   const openCreate = (unitId: string | null) => {
     setCreateUnitId(unitId);
