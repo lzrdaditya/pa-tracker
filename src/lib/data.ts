@@ -186,10 +186,18 @@ export function useDeleteUnit() {
 export function useSaveTarget() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (pa_target: number) => {
+    mutationFn: async (input: {
+      pa_target?: number;
+      mtbs_target_hours?: number;
+      mttr_target_hours?: number;
+    }) => {
+      const payload: Record<string, unknown> = { id: 1 };
+      if (input.pa_target !== undefined) payload.pa_target = input.pa_target;
+      if (input.mtbs_target_hours !== undefined) payload.mtbs_target_hours = input.mtbs_target_hours;
+      if (input.mttr_target_hours !== undefined) payload.mttr_target_hours = input.mttr_target_hours;
       const { error } = await supabase
         .from("app_settings")
-        .upsert({ id: 1, pa_target }, { onConflict: "id" });
+        .upsert(payload, { onConflict: "id" });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
