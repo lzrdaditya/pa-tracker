@@ -143,7 +143,6 @@ function Dashboard() {
     return map;
   }, [breakdowns, anchor]);
 
-
   const openByUnit = useMemo(() => {
     const map = new Map<string, Breakdown>();
     for (const b of breakdowns) if (!b.finished_at) map.set(b.unit_id, b);
@@ -155,33 +154,37 @@ function Dashboard() {
     [breakdowns],
   );
 
+  // Unfiltered baseline for class summaries
+  const allEnriched = useMemo(() => {
+    return units.map((u) => {
+      const dt = downtimeByUnit.get(u.id) ?? 0;
+      const stoppages = stoppageCountByUnit.get(u.id) ?? 0;
+      const stats = computePA(dt, target, anchor);
+      const level: Level = paStatusLevel(stats.paCurrent, target);
+      const open = openByUnit.get(u.id) ?? null;
+      const mtbs = computeMTBS(stats.elapsedCalHours, dt, stoppages);
+      const mttr = computeMTTR(dt, stoppages);
+      const remStop = remainingStoppages(
+        stats.elapsedCalHours,
+        dt,
+        stoppages,
+        u.mtbs_target_hours,
+      );
+      const remMttr = remainingMttrBudget(dt, stoppages, u.mttr_target_hours);
+      const maxNext = maxHoursNextRepair(dt, stoppages, u.mttr_target_hours);
+      return { unit: u, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext };
+    });
+  }, [units, downtimeByUnit, stoppageCountByUnit, target, openByUnit, anchor]);
+
+  // Filtered baseline for Fleet KPIs and Lists
   const enriched = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return units
-      .filter((u) => (classFilter === "all" ? true : (u.notes ?? "") === classFilter))
-      .filter((u) =>
-        needle ? (u.code + " " + u.name).toLowerCase().includes(needle) : true,
-      )
-      .map((u) => {
-        const dt = downtimeByUnit.get(u.id) ?? 0;
-        const stoppages = stoppageCountByUnit.get(u.id) ?? 0;
-        const stats = computePA(dt, target, anchor);
-        const level: Level = paStatusLevel(stats.paCurrent, target);
-        const open = openByUnit.get(u.id) ?? null;
-        const mtbs = computeMTBS(stats.elapsedCalHours, dt, stoppages);
-        const mttr = computeMTTR(dt, stoppages);
-        const remStop = remainingStoppages(
-          stats.elapsedCalHours,
-          dt,
-          stoppages,
-          u.mtbs_target_hours,
-        );
-        const remMttr = remainingMttrBudget(dt, stoppages, u.mttr_target_hours);
-        const maxNext = maxHoursNextRepair(dt, stoppages, u.mttr_target_hours);
-        return { unit: u, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext };
-      });
-  }, [units, downtimeByUnit, stoppageCountByUnit, target, q, openByUnit, anchor, classFilter]);
-
+    return allEnriched
+      .filter((e) => (classFilter === "all" ? true : (e.unit.notes ?? "") === classFilter))
+      .filter((e) =>
+        needle ? (e.unit.code + " " + e.unit.name).toLowerCase().includes(needle) : true,
+      );
+  }, [allEnriched, q, classFilter]);
 
   const fleet = useMemo(() => {
     const totalDown = enriched.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
@@ -200,10 +203,10 @@ function Dashboard() {
     return { stats, critical, warn, ok, activeCount, totalStoppages, mtbs, mttr };
   }, [enriched, target, anchor, activeBreakdowns]);
 
-  // Per-class aggregation for Main dashboard tab
+  // Per-class aggregation using UNFILTERED allEnriched data
   const classSummaries = useMemo(() => {
-    const groups = new Map<string, typeof enriched>();
-    for (const e of enriched) {
+    const groups = new Map<string, typeof allEnriched>();
+    for (const e of allEnriched) {
       const key = (e.unit.notes ?? "").trim() || "Unassigned";
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(e);
@@ -222,9 +225,7 @@ function Dashboard() {
         return { className, items, stats, mtbs, mttr, level, totalStop, down };
       })
       .sort((a, b) => a.className.localeCompare(b.className));
-  }, [enriched, target, anchor]);
-
-
+  }, [allEnriched, target, anchor]);
 
   const openCreate = (unitId: string | null) => {
     setCreateUnitId(unitId);
@@ -355,56 +356,6 @@ function Dashboard() {
             )}
           </div>
         </section>
-        {/* Active breakdowns strip */}
-        {isCurrentMonth && activeBreakdowns.length > 0 && (
-          <section className="rounded-lg border bg-card overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b bg-destructive/5">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-60" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
-                </span>
-                Currently down
-                <span className="text-muted-foreground font-normal">
-                  · {activeBreakdowns.length} unit{activeBreakdowns.length === 1 ? "" : "s"}
-                </span>
-              </div>
-            </div>
-            <div className="divide-y">
-              {activeBreakdowns.map((b) => {
-                const u = units.find((x) => x.id === b.unit_id);
-                const el = elapsedHours(b.started_at, null, anchor);
-                return (
-                  <div key={b.id} className="flex items-center gap-3 px-4 py-3 flex-wrap">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{u?.code ?? "?"}</span>
-                        <span className="font-semibold truncate">{u?.name ?? "Unknown"}</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3 flex-wrap">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> since {formatDateTime(b.started_at)}
-                        </span>
-                        {b.notes && <span className="truncate">· {b.notes}</span>}
-                      </div>
-                    </div>
-                    <div className="font-mono tabular font-bold text-destructive text-lg">
-                      {formatHours(el)}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setEditing(b)}>
-                        <Pencil className="h-3.5 w-3.5 mr-1" /> Update
-                      </Button>
-                      <Button size="sm" onClick={() => finishNow(b)} disabled={updateBd.isPending}>
-                        <Flag className="h-3.5 w-3.5 mr-1" /> Mark finished
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
 
         {/* Views */}
         <Tabs defaultValue="overview" className="space-y-4">
@@ -415,74 +366,9 @@ function Dashboard() {
           </TabsList>
 
           {/* Main dashboard: fleet KPIs + per-class summaries */}
-          <TabsContent value="overview" className="space-y-6">
-            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <KpiCard
-                label={isCurrentMonth ? "Fleet PA (MTD)" : "Fleet PA"}
-                value={formatPct(fleet.stats.paCurrent)}
-                hint={`Target ${formatPct(target)}`}
-                tone={paStatusLevel(fleet.stats.paCurrent, target)}
-                icon={<TrendingUp className="h-4 w-4" />}
-              />
-              <KpiCard
-                label="Running breakdowns"
-                value={`${fleet.activeCount}`}
-                hint={fleet.activeCount === 0 ? "All units up" : "Awaiting finish"}
-                tone={fleet.activeCount === 0 ? "ok" : "warn"}
-                icon={<CircleDot className="h-4 w-4" />}
-              />
-              <KpiCard
-                label="Units at target"
-                value={`${fleet.ok}/${units.length || 0}`}
-                hint="Green units"
-                tone="ok"
-                icon={<CheckCircle2 className="h-4 w-4" />}
-              />
-              <KpiCard
-                label="Below target"
-                value={`${fleet.critical}`}
-                hint={`${fleet.warn} in warning`}
-                tone={fleet.critical > 0 ? "bad" : fleet.warn > 0 ? "warn" : "ok"}
-                icon={<AlertTriangle className="h-4 w-4" />}
-              />
-            </section>
-
-            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <KpiCard
-                label="MTBS (Fleet)"
-                value={formatHoursOrDash(fleet.mtbs)}
-                hint={`Target ≥ ${formatHours(settings?.mtbs_target_hours ?? 65)}`}
-                tone={
-                  fleet.mtbs === null
-                    ? "ok"
-                    : fleet.mtbs >= (settings?.mtbs_target_hours ?? 65)
-                      ? "ok"
-                      : "warn"
-                }
-                icon={<Gauge className="h-4 w-4" />}
-              />
-              <KpiCard
-                label="MTTR (Fleet)"
-                value={formatHoursOrDash(fleet.mttr)}
-                hint={`Target ≤ ${formatHours(settings?.mttr_target_hours ?? 10)}`}
-                tone={
-                  fleet.mttr === null
-                    ? "ok"
-                    : fleet.mttr <= (settings?.mttr_target_hours ?? 10)
-                      ? "ok"
-                      : "warn"
-                }
-                icon={<Timer className="h-4 w-4" />}
-              />
-              <KpiCard
-                label="Stoppages"
-                value={`${fleet.totalStoppages}`}
-                hint="Recorded this period"
-                tone={fleet.totalStoppages === 0 ? "ok" : "warn"}
-                icon={<AlertTriangle className="h-4 w-4" />}
-              />
-            </section>
-
+          <TabsContent value="overview" className="space-y-8">
+            
+            {/* Top Section: Summary by class */}
             <section>
               <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold mb-2">
                 Summary by class
@@ -512,6 +398,79 @@ function Dashboard() {
                 </div>
               )}
             </section>
+
+            {/* Bottom Section: Fleet KPIs */}
+            <div className="space-y-6">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+                Fleet Overview
+              </div>
+              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <KpiCard
+                  label={isCurrentMonth ? "Fleet PA (MTD)" : "Fleet PA"}
+                  value={formatPct(fleet.stats.paCurrent)}
+                  hint={`Target ${formatPct(target)}`}
+                  tone={paStatusLevel(fleet.stats.paCurrent, target)}
+                  icon={<TrendingUp className="h-4 w-4" />}
+                />
+                <KpiCard
+                  label="Running breakdowns"
+                  value={`${fleet.activeCount}`}
+                  hint={fleet.activeCount === 0 ? "All units up" : "Awaiting finish"}
+                  tone={fleet.activeCount === 0 ? "ok" : "warn"}
+                  icon={<CircleDot className="h-4 w-4" />}
+                />
+                <KpiCard
+                  label="Units at target"
+                  value={`${fleet.ok}/${units.length || 0}`}
+                  hint="Green units"
+                  tone="ok"
+                  icon={<CheckCircle2 className="h-4 w-4" />}
+                />
+                <KpiCard
+                  label="Below target"
+                  value={`${fleet.critical}`}
+                  hint={`${fleet.warn} in warning`}
+                  tone={fleet.critical > 0 ? "bad" : fleet.warn > 0 ? "warn" : "ok"}
+                  icon={<AlertTriangle className="h-4 w-4" />}
+                />
+              </section>
+
+              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <KpiCard
+                  label="MTBS (Fleet)"
+                  value={formatHoursOrDash(fleet.mtbs)}
+                  hint={`Target ≥ ${formatHours(settings?.mtbs_target_hours ?? 65)}`}
+                  tone={
+                    fleet.mtbs === null
+                      ? "ok"
+                      : fleet.mtbs >= (settings?.mtbs_target_hours ?? 65)
+                        ? "ok"
+                        : "warn"
+                  }
+                  icon={<Gauge className="h-4 w-4" />}
+                />
+                <KpiCard
+                  label="MTTR (Fleet)"
+                  value={formatHoursOrDash(fleet.mttr)}
+                  hint={`Target ≤ ${formatHours(settings?.mttr_target_hours ?? 10)}`}
+                  tone={
+                    fleet.mttr === null
+                      ? "ok"
+                      : fleet.mttr <= (settings?.mttr_target_hours ?? 10)
+                        ? "ok"
+                        : "warn"
+                  }
+                  icon={<Timer className="h-4 w-4" />}
+                />
+                <KpiCard
+                  label="Stoppages"
+                  value={`${fleet.totalStoppages}`}
+                  hint="Recorded this period"
+                  tone={fleet.totalStoppages === 0 ? "ok" : "warn"}
+                  icon={<AlertTriangle className="h-4 w-4" />}
+                />
+              </section>
+            </div>
           </TabsContent>
 
           {/* List view */}
@@ -606,7 +565,6 @@ function Dashboard() {
           </TabsContent>
         </Tabs>
       </main>
-
 
       <BreakdownDialog
         open={createOpen}
@@ -838,9 +796,6 @@ function UnitCard({
         </div>
       </div>
 
-
-
-
       <div className="mt-4 flex gap-2">
         {open ? (
           <>
@@ -883,7 +838,6 @@ function BudgetRow({
     </div>
   );
 }
-
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
