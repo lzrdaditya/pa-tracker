@@ -507,10 +507,13 @@ function Dashboard() {
                     open={e.open}
                     target={target}
                     onRegister={() => openCreate(e.unit.id)}
+                    onUpdateOpen={() => e.open && setEditing(e.open)}
+                    onFinishOpen={() => e.open && finishNow(e.open)}
                   />
                 ))}
               </div>
             )}
+            
           </TabsContent>
 
           {/* Detailed view (current cards) */}
@@ -926,6 +929,8 @@ function ListRow({
   open,
   target,
   onRegister,
+  onUpdateOpen,
+  onFinishOpen,
 }: {
   unit: Unit;
   stats: ReturnType<typeof computePA>;
@@ -933,6 +938,8 @@ function ListRow({
   open: Breakdown | null;
   target: number;
   onRegister: () => void;
+  onUpdateOpen: () => void;
+  onFinishOpen: () => void;
 }) {
   const max = Math.max(0.001, stats.maxAllowedDowntime);
   const usedPct = Math.min(100, Math.max(0, (stats.downtimeUsedHours / max) * 100));
@@ -996,9 +1003,22 @@ function ListRow({
         {tierLabel}
       </span>
 
-      <Button size="sm" variant="outline" onClick={onRegister}>
-        <Plus className="h-3.5 w-3.5 mr-1" /> Log
-      </Button>
+      <div className="flex items-center gap-2">
+        {open ? (
+          <>
+            <Button size="sm" variant="outline" onClick={onUpdateOpen}>
+              <Pencil className="h-3.5 w-3.5 mr-1" /> Update
+            </Button>
+            <Button size="sm" onClick={onFinishOpen}>
+              <Flag className="h-3.5 w-3.5 mr-1" /> Finish
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" variant="outline" onClick={onRegister}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Log
+          </Button>
+        )}
+      </div>
 
       {/* silence unused level warning */}
       <span className="hidden">{level}</span>
