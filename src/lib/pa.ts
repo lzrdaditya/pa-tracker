@@ -28,12 +28,16 @@ export function computePA(
   const dom = now.getDate();
   const calTimeHours = dim * 24;
   const elapsedCalHours = dom * 24;
+  
+  // Physical availability (PA) = (cal. time - down time) / cal time
   const paCurrent =
     elapsedCalHours > 0 ? (elapsedCalHours - downtimeThisMonth) / elapsedCalHours : 1;
   const paMonthProjected =
     calTimeHours > 0 ? (calTimeHours - downtimeThisMonth) / calTimeHours : 1;
+    
   const maxAllowedDowntime = calTimeHours * (1 - target);
   const remainingAllowedDowntime = maxAllowedDowntime - downtimeThisMonth;
+  
   return {
     calTimeHours,
     elapsedCalHours,
@@ -61,13 +65,13 @@ export function formatHours(h: number) {
   return `${sign}${abs.toFixed(1)}h`;
 }
 
-/** MTBS = (Ready Hour - Downtime) / No of Stoppage, where Ready Hour = Elapsed Cal - Downtime */
+/** MTBS = (Calendar Time - Downtime) / No of Stoppage */
 export function computeMTBS(elapsedCalHours: number, downtime: number, stoppages: number) {
   if (stoppages <= 0) return null;
-  return (elapsedCalHours - downtime - downtime) / stoppages;
+  return (elapsedCalHours - downtime) / stoppages;
 }
 
-/** MTTR = Downtime / No of Stoppage */
+/** MTTR = (Sum of down time) / No of stoppage */
 export function computeMTTR(downtime: number, stoppages: number) {
   if (stoppages <= 0) return null;
   return downtime / stoppages;
@@ -120,8 +124,6 @@ export function budgetStatus(remaining: number | null, ceiling: number): BudgetT
   if (ceiling > 0 && remaining / ceiling < 0.2) return "warn";
   return "ok";
 }
-
-
 
 export function formatPct(v: number) {
   return `${(v * 100).toFixed(2)}%`;
