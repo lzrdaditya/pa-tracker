@@ -82,6 +82,7 @@ function Dashboard() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
   const [classFilter, setClassFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const currentMonthKey = `${clock.getFullYear()}-${String(clock.getMonth() + 1).padStart(2, "0")}`;
   const isCurrentMonth = selectedMonth === currentMonthKey;
@@ -181,10 +182,25 @@ function Dashboard() {
     const needle = q.trim().toLowerCase();
     return allEnriched
       .filter((e) => (classFilter === "all" ? true : (e.unit.notes ?? "") === classFilter))
+      .filter((e) => {
+        if (statusFilter === "all") return true;
+        if (statusFilter === "breakdown") return e.open !== null;
+        
+        const max = Math.max(0.001, e.stats.maxAllowedDowntime);
+        const usedPct = Math.min(100, Math.max(0, (e.stats.downtimeUsedHours / max) * 100));
+        const remaining = e.stats.remainingAllowedDowntime;
+        const remainingPct = Math.max(0, 100 - usedPct);
+
+        if (statusFilter === "safe") return remaining > 0 && remainingPct >= 25;
+        if (statusFilter === "critical") return remaining > 0 && remainingPct < 25;
+        if (statusFilter === "over") return remaining <= 0;
+        
+        return true;
+      })
       .filter((e) =>
         needle ? (e.unit.code + " " + e.unit.name).toLowerCase().includes(needle) : true,
       );
-  }, [allEnriched, q, classFilter]);
+  }, [allEnriched, q, classFilter, statusFilter]);
 
   const fleet = useMemo(() => {
     const totalDown = enriched.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
@@ -318,7 +334,7 @@ function Dashboard() {
           <div className="flex items-center gap-2">
             <Wrench className="h-4 w-4 text-muted-foreground" />
             <Select value={classFilter} onValueChange={setClassFilter}>
-              <SelectTrigger className="h-9 w-[200px]">
+              <SelectTrigger className="h-9 w-[160px]">
                 <SelectValue placeholder="All classes" />
               </SelectTrigger>
               <SelectContent>
@@ -334,12 +350,28 @@ function Dashboard() {
               </SelectContent>
             </Select>
           </div>
-          {(classFilter !== "all" || !isCurrentMonth) && (
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-muted-foreground" />
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-9 w-[160px]">
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="breakdown">Breakdown</SelectItem>
+                <SelectItem value="safe">Safe</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
+                <SelectItem value="over">Downtime Over</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {(classFilter !== "all" || statusFilter !== "all" || !isCurrentMonth) && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
                 setClassFilter("all");
+                setStatusFilter("all");
                 setSelectedMonth(currentMonthKey);
               }}
             >
@@ -513,7 +545,6 @@ function Dashboard() {
                 ))}
               </div>
             )}
-            
           </TabsContent>
 
           {/* Detailed view (current cards) */}
@@ -961,11 +992,11 @@ function ListRow({
   const barColor =
     tier === "high" ? "bg-success" : tier === "low" ? "bg-warning" : "bg-destructive";
   const tierLabel =
-    tier === "high" ? "Healthy" : tier === "low" ? "Low headroom" : "Budget spent";
+    tier === "high" ? "Safe" : tier === "low" ? "Critical" : "Downtime Over";
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 flex-wrap">
-      <div className="min-w-0 flex-1">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_280px_120px_180px] items-center gap-4 px-4 py-3">
+      <div className="min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-xs text-muted-foreground">{unit.code}</span>
           <span className="font-semibold truncate">{unit.name}</span>
@@ -985,7 +1016,7 @@ function ListRow({
         </div>
       </div>
 
-      <div className="w-full sm:w-[280px]">
+      <div className="w-full">
         <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
           <div className={`h-full ${barColor} transition-all`} style={{ width: `${usedPct}%` }} />
         </div>
@@ -999,11 +1030,13 @@ function ListRow({
         </div>
       </div>
 
-      <span className={`text-[10px] font-semibold px-2 py-1 rounded ${tierChip} uppercase tracking-wider whitespace-nowrap`}>
-        {tierLabel}
-      </span>
+      <div className="flex justify-start md:justify-center">
+        <span className={`text-[10px] font-semibold px-2 py-1 rounded ${tierChip} uppercase tracking-wider whitespace-nowrap`}>
+          {tierLabel}
+        </span>
+      </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 justify-start md:justify-end">
         {open ? (
           <>
             <Button size="sm" variant="outline" onClick={onUpdateOpen}>
