@@ -38,6 +38,7 @@ import {
 import { BreakdownDialog } from "@/components/BreakdownDialog";
 import { ManageUnitsDialog } from "@/components/ManageUnitsDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { HistoryDialog } from "@/components/HistoryDialog";
 import { toast } from "sonner";
 import {
   Activity,
