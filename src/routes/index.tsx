@@ -705,7 +705,7 @@ function UnitCard({
   onFinishOpen,
 }: {
   unit: Unit;
-  stats: ReturnType<typeof computePA>;
+  stats: ReturnType<typeof computePARange>;
   level: Level;
   open: Breakdown | null;
   target: number;
@@ -970,7 +970,7 @@ function ListRow({
   onFinishOpen,
 }: {
   unit: Unit;
-  stats: ReturnType<typeof computePA>;
+  stats: ReturnType<typeof computePARange>;
   level: Level;
   open: Breakdown | null;
   target: number;
