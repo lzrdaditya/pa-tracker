@@ -1060,18 +1060,18 @@ function ListRow({
         </span>
       </div>
 
-      <div className="flex items-center gap-2 justify-start md:justify-end">
+      <div className="flex items-center gap-2 justify-start md:justify-end" onClick={stop}>
         {open ? (
           <>
-            <Button size="sm" variant="outline" onClick={onUpdateOpen}>
+            <Button size="sm" variant="outline" onClick={(e) => { stop(e); onUpdateOpen(); }}>
               <Pencil className="h-3.5 w-3.5 mr-1" /> Update
             </Button>
-            <Button size="sm" onClick={onFinishOpen}>
+            <Button size="sm" onClick={(e) => { stop(e); onFinishOpen(); }}>
               <Flag className="h-3.5 w-3.5 mr-1" /> Finish
             </Button>
           </>
         ) : (
-          <Button size="sm" variant="outline" onClick={onRegister}>
+          <Button size="sm" variant="outline" onClick={(e) => { stop(e); onRegister(); }}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Log
           </Button>
         )}
