@@ -129,6 +129,55 @@ export function formatPct(v: number) {
   return `${(v * 100).toFixed(2)}%`;
 }
 
+/** PA stats for an arbitrary date range. */
+export function computePARange(
+  downtimeHours: number,
+  target: number,
+  from: Date,
+  to: Date,
+  now: Date = new Date(),
+): PAStats {
+  const periodEnd = to;
+  const effectiveEnd = now < periodEnd ? now : periodEnd;
+  const calTimeHours = Math.max(0, (periodEnd.getTime() - from.getTime()) / 3_600_000);
+  const elapsedCalHours = Math.max(0, (effectiveEnd.getTime() - from.getTime()) / 3_600_000);
+  const paCurrent =
+    elapsedCalHours > 0 ? (elapsedCalHours - downtimeHours) / elapsedCalHours : 1;
+  const paMonthProjected =
+    calTimeHours > 0 ? (calTimeHours - downtimeHours) / calTimeHours : 1;
+  const maxAllowedDowntime = calTimeHours * (1 - target);
+  const remainingAllowedDowntime = maxAllowedDowntime - downtimeHours;
+  return {
+    calTimeHours,
+    elapsedCalHours,
+    downtimeUsedHours: downtimeHours,
+    paCurrent,
+    paMonthProjected,
+    maxAllowedDowntime,
+    remainingAllowedDowntime,
+    target,
+    daysInMonth: Math.max(1, Math.ceil(calTimeHours / 24)),
+    dayOfMonth: Math.max(0, Math.ceil(elapsedCalHours / 24)),
+  };
+}
+
+/** Overlap of a breakdown with an arbitrary date range, capped at now. */
+export function hoursInRange(
+  startedAt: string,
+  finishedAt: string | null,
+  from: Date,
+  to: Date,
+  now: Date = new Date(),
+) {
+  const s = new Date(startedAt);
+  const rawEnd = finishedAt ? new Date(finishedAt) : now;
+  const lo = s > from ? s : from;
+  const hiCap = rawEnd < to ? rawEnd : to;
+  const hi = hiCap < now ? hiCap : now;
+  const ms = hi.getTime() - lo.getTime();
+  return ms > 0 ? ms / 3_600_000 : 0;
+}
+
 export function monthBounds(now: Date = new Date()) {
   const y = now.getFullYear();
   const m = now.getMonth();
