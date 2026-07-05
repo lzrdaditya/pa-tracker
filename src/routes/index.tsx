@@ -77,23 +77,29 @@ function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+  const todayStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const [fromDate, setFromDate] = useState<string>(() => {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
   });
+  const [toDate, setToDate] = useState<string>(() => todayStr(new Date()));
   const [classFilter, setClassFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const currentMonthKey = `${clock.getFullYear()}-${String(clock.getMonth() + 1).padStart(2, "0")}`;
-  const isCurrentMonth = selectedMonth === currentMonthKey;
+  const from = useMemo(() => {
+    const [y, m, d] = fromDate.split("-").map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  }, [fromDate]);
+  const to = useMemo(() => {
+    const [y, m, d] = toDate.split("-").map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59, 999);
+  }, [toDate]);
 
-  const anchor = useMemo(() => {
-    const [ys, ms] = selectedMonth.split("-").map(Number);
-    if (isCurrentMonth) return clock;
-    return new Date(ys, ms, 0, 23, 59, 59);
-  }, [selectedMonth, isCurrentMonth, clock]);
+  const isCurrentPeriod = to.getTime() >= clock.getTime();
+  const anchor = clock < to ? clock : to;
 
-  const { data: breakdowns = [] } = useMonthBreakdowns(anchor);
+  const { data: breakdowns = [] } = useRangeBreakdowns(from, to);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createUnitId, setCreateUnitId] = useState<string | null>(null);
