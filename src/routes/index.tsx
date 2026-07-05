@@ -258,7 +258,8 @@ function Dashboard() {
     }
   };
 
-  const monthLabel = anchor.toLocaleString(undefined, { month: "long", year: "numeric" });
+  const periodLabel = `${from.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${to.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  const [historyUnit, setHistoryUnit] = useState<Unit | null>(null);
 
   return (
     <div className="min-h-screen bg-background">
