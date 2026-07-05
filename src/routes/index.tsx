@@ -369,14 +369,16 @@ function Dashboard() {
               </SelectContent>
             </Select>
           </div>
-          {(classFilter !== "all" || statusFilter !== "all" || !isCurrentMonth) && (
+          {(classFilter !== "all" || statusFilter !== "all" || !isCurrentPeriod) && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
                 setClassFilter("all");
                 setStatusFilter("all");
-                setSelectedMonth(currentMonthKey);
+                const d = clock;
+                setFromDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`);
+                setToDate(todayStr(d));
               }}
             >
               Reset
@@ -385,7 +387,7 @@ function Dashboard() {
           <div className="ml-auto text-xs text-muted-foreground">
             Showing <span className="font-semibold text-foreground">{enriched.length}</span>{" "}
             of {units.length} unit{units.length === 1 ? "" : "s"}
-            {!isCurrentMonth && (
+            {!isCurrentPeriod && (
               <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
                 Historical view
               </span>
