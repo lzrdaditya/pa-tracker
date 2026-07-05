@@ -971,6 +971,7 @@ function ListRow({
   onRegister,
   onUpdateOpen,
   onFinishOpen,
+  onOpenHistory,
 }: {
   unit: Unit;
   stats: ReturnType<typeof computePARange>;
@@ -980,6 +981,7 @@ function ListRow({
   onRegister: () => void;
   onUpdateOpen: () => void;
   onFinishOpen: () => void;
+  onOpenHistory: () => void;
 }) {
   const max = Math.max(0.001, stats.maxAllowedDowntime);
   const usedPct = Math.min(100, Math.max(0, (stats.downtimeUsedHours / max) * 100));
@@ -1003,8 +1005,21 @@ function ListRow({
   const tierLabel =
     tier === "high" ? "Safe" : tier === "low" ? "Critical" : "Downtime Over";
 
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[1fr_280px_120px_180px] items-center gap-4 px-4 py-3">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpenHistory}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenHistory();
+        }
+      }}
+      className="grid grid-cols-1 md:grid-cols-[1fr_280px_120px_180px] items-center gap-4 px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors focus:outline-none focus:bg-muted/40"
+    >
       <div className="min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-xs text-muted-foreground">{unit.code}</span>
