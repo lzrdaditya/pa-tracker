@@ -318,19 +318,22 @@ function Dashboard() {
           </div>
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="h-9 w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                    {m.value === currentMonthKey ? " (current)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              type="date"
+              value={fromDate}
+              max={toDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="h-9 w-[150px]"
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <Input
+              type="date"
+              value={toDate}
+              min={fromDate}
+              max={todayStr(clock)}
+              onChange={(e) => setToDate(e.target.value)}
+              className="h-9 w-[150px]"
+            />
           </div>
           <div className="flex items-center gap-2">
             <Wrench className="h-4 w-4 text-muted-foreground" />
