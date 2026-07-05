@@ -630,6 +630,15 @@ function Dashboard() {
         startInNew={manageStartNew}
       />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <HistoryDialog
+        open={!!historyUnit}
+        onOpenChange={(v) => !v && setHistoryUnit(null)}
+        unit={historyUnit}
+        onEdit={(b) => {
+          setHistoryUnit(null);
+          setEditing(b);
+        }}
+      />
     </div>
   );
 }
