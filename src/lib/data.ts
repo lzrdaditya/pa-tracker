@@ -58,6 +58,24 @@ export function useSettings() {
   });
 }
 
+/** Breakdowns overlapping an arbitrary date range. */
+export function useRangeBreakdowns(from: Date, to: Date) {
+  return useQuery({
+    queryKey: ["breakdowns", "range", from.toISOString(), to.toISOString()],
+    queryFn: async (): Promise<Breakdown[]> => {
+      const { data, error } = await supabase
+        .from("breakdowns")
+        .select("id,unit_id,started_at,finished_at,notes")
+        .lt("started_at", to.toISOString())
+        .or(`finished_at.is.null,finished_at.gte.${from.toISOString()}`)
+        .order("started_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Breakdown[];
+    },
+    refetchInterval: 60_000,
+  });
+}
+
 /** All breakdowns overlapping the given month (open OR finished this month). */
 export function useMonthBreakdowns(anchor?: Date) {
   const { start, end } = monthBounds(anchor);

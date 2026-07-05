@@ -3,18 +3,18 @@ import { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   useUnits,
-  useMonthBreakdowns,
+  useRangeBreakdowns,
   useSettings,
   useUpdateBreakdown,
   type Unit,
   type Breakdown,
 } from "@/lib/data";
 import {
-  computePA,
+  computePARange,
   formatHours,
   formatPct,
   paStatusLevel,
-  hoursInMonth,
+  hoursInRange,
   elapsedHours,
   formatDateTime,
   computeMTBS,
@@ -38,6 +38,7 @@ import {
 import { BreakdownDialog } from "@/components/BreakdownDialog";
 import { ManageUnitsDialog } from "@/components/ManageUnitsDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { HistoryDialog } from "@/components/HistoryDialog";
 import { toast } from "sonner";
 import {
   Activity,
@@ -77,23 +78,29 @@ function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+  const todayStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const [fromDate, setFromDate] = useState<string>(() => {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
   });
+  const [toDate, setToDate] = useState<string>(() => todayStr(new Date()));
   const [classFilter, setClassFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const currentMonthKey = `${clock.getFullYear()}-${String(clock.getMonth() + 1).padStart(2, "0")}`;
-  const isCurrentMonth = selectedMonth === currentMonthKey;
+  const from = useMemo(() => {
+    const [y, m, d] = fromDate.split("-").map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  }, [fromDate]);
+  const to = useMemo(() => {
+    const [y, m, d] = toDate.split("-").map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59, 999);
+  }, [toDate]);
 
-  const anchor = useMemo(() => {
-    const [ys, ms] = selectedMonth.split("-").map(Number);
-    if (isCurrentMonth) return clock;
-    return new Date(ys, ms, 0, 23, 59, 59);
-  }, [selectedMonth, isCurrentMonth, clock]);
+  const isCurrentPeriod = to.getTime() >= clock.getTime();
+  const anchor = clock < to ? clock : to;
 
-  const { data: breakdowns = [] } = useMonthBreakdowns(anchor);
+  const { data: breakdowns = [] } = useRangeBreakdowns(from, to);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createUnitId, setCreateUnitId] = useState<string | null>(null);
@@ -112,37 +119,26 @@ function Dashboard() {
     return Array.from(s).sort();
   }, [units]);
 
-  const monthOptions = useMemo(() => {
-    const out: { value: string; label: string }[] = [];
-    const base = new Date(clock.getFullYear(), clock.getMonth(), 1);
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
-      const v = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      out.push({ value: v, label: d.toLocaleString(undefined, { month: "long", year: "numeric" }) });
-    }
-    return out;
-  }, [clock]);
-
   const downtimeByUnit = useMemo(() => {
     const map = new Map<string, number>();
     for (const b of breakdowns) {
       map.set(
         b.unit_id,
-        (map.get(b.unit_id) ?? 0) + hoursInMonth(b.started_at, b.finished_at, anchor),
+        (map.get(b.unit_id) ?? 0) + hoursInRange(b.started_at, b.finished_at, from, to, clock),
       );
     }
     return map;
-  }, [breakdowns, anchor]);
+  }, [breakdowns, from, to, clock]);
 
   const stoppageCountByUnit = useMemo(() => {
     const map = new Map<string, number>();
     for (const b of breakdowns) {
-      if (hoursInMonth(b.started_at, b.finished_at, anchor) > 0) {
+      if (hoursInRange(b.started_at, b.finished_at, from, to, clock) > 0) {
         map.set(b.unit_id, (map.get(b.unit_id) ?? 0) + 1);
       }
     }
     return map;
-  }, [breakdowns, anchor]);
+  }, [breakdowns, from, to, clock]);
 
   const openByUnit = useMemo(() => {
     const map = new Map<string, Breakdown>();
@@ -160,7 +156,7 @@ function Dashboard() {
     return units.map((u) => {
       const dt = downtimeByUnit.get(u.id) ?? 0;
       const stoppages = stoppageCountByUnit.get(u.id) ?? 0;
-      const stats = computePA(dt, target, anchor);
+      const stats = computePARange(dt, target, from, to, clock);
       const level: Level = paStatusLevel(stats.paCurrent, target);
       const open = openByUnit.get(u.id) ?? null;
       const mtbs = computeMTBS(stats.elapsedCalHours, dt, stoppages);
@@ -175,7 +171,7 @@ function Dashboard() {
       const maxNext = maxHoursNextRepair(dt, stoppages, u.mttr_target_hours);
       return { unit: u, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext };
     });
-  }, [units, downtimeByUnit, stoppageCountByUnit, target, openByUnit, anchor]);
+  }, [units, downtimeByUnit, stoppageCountByUnit, target, openByUnit, from, to, clock]);
 
   // Filtered baseline for Fleet KPIs and Lists
   const enriched = useMemo(() => {
@@ -185,7 +181,7 @@ function Dashboard() {
       .filter((e) => {
         if (statusFilter === "all") return true;
         if (statusFilter === "breakdown") return e.open !== null;
-        
+
         const max = Math.max(0.001, e.stats.maxAllowedDowntime);
         const usedPct = Math.min(100, Math.max(0, (e.stats.downtimeUsedHours / max) * 100));
         const remaining = e.stats.remainingAllowedDowntime;
@@ -194,7 +190,7 @@ function Dashboard() {
         if (statusFilter === "safe") return remaining > 0 && remainingPct >= 25;
         if (statusFilter === "critical") return remaining > 0 && remainingPct < 25;
         if (statusFilter === "over") return remaining <= 0;
-        
+
         return true;
       })
       .filter((e) =>
@@ -202,22 +198,29 @@ function Dashboard() {
       );
   }, [allEnriched, q, classFilter, statusFilter]);
 
+  // Average per-unit MTBS/MTTR (only units with stoppages contribute)
+  function avgOfPerUnit(items: typeof allEnriched, pick: (e: (typeof allEnriched)[number]) => number | null) {
+    const vals = items.map(pick).filter((v): v is number => v !== null && isFinite(v));
+    if (vals.length === 0) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }
+
   const fleet = useMemo(() => {
     const totalDown = enriched.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
     const totalStoppages = enriched.reduce((a, e) => a + e.stoppages, 0);
     const n = enriched.length || 1;
     const avgDown = totalDown / n;
-    const stats = computePA(avgDown, target, anchor);
+    const stats = computePARange(avgDown, target, from, to, clock);
     const critical = enriched.filter((e) => e.level === "bad").length;
     const warn = enriched.filter((e) => e.level === "warn").length;
     const ok = enriched.filter((e) => e.level === "ok").length;
     const enrichedIds = new Set(enriched.map((e) => e.unit.id));
     const activeCount = activeBreakdowns.filter((b) => enrichedIds.has(b.unit_id)).length;
-    const totalReady = enriched.reduce((a, e) => a + e.stats.elapsedCalHours, 0);
-    const mtbs = computeMTBS(totalReady, totalDown, totalStoppages);
-    const mttr = computeMTTR(totalDown, totalStoppages);
+    // Per-unit average — matches per-unit target scale
+    const mtbs = avgOfPerUnit(enriched, (e) => e.mtbs);
+    const mttr = avgOfPerUnit(enriched, (e) => e.mttr);
     return { stats, critical, warn, ok, activeCount, totalStoppages, mtbs, mttr };
-  }, [enriched, target, anchor, activeBreakdowns]);
+  }, [enriched, target, from, to, clock, activeBreakdowns]);
 
   // Per-class aggregation using UNFILTERED allEnriched data
   const classSummaries = useMemo(() => {
@@ -231,17 +234,16 @@ function Dashboard() {
       .map(([className, items]) => {
         const totalDown = items.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
         const totalStop = items.reduce((a, e) => a + e.stoppages, 0);
-        const totalReady = items.reduce((a, e) => a + e.stats.elapsedCalHours, 0);
         const avgDown = totalDown / items.length;
-        const stats = computePA(avgDown, target, anchor);
-        const mtbs = computeMTBS(totalReady, totalDown, totalStop);
-        const mttr = computeMTTR(totalDown, totalStop);
+        const stats = computePARange(avgDown, target, from, to, clock);
+        const mtbs = avgOfPerUnit(items, (e) => e.mtbs);
+        const mttr = avgOfPerUnit(items, (e) => e.mttr);
         const level = paStatusLevel(stats.paCurrent, target);
         const down = items.filter((i) => i.open).length;
         return { className, items, stats, mtbs, mttr, level, totalStop, down };
       })
       .sort((a, b) => a.className.localeCompare(b.className));
-  }, [allEnriched, target, anchor]);
+  }, [allEnriched, target, from, to, clock]);
 
   const openCreate = (unitId: string | null) => {
     setCreateUnitId(unitId);
@@ -257,7 +259,8 @@ function Dashboard() {
     }
   };
 
-  const monthLabel = anchor.toLocaleString(undefined, { month: "long", year: "numeric" });
+  const periodLabel = `${from.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${to.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  const [historyUnit, setHistoryUnit] = useState<Unit | null>(null);
 
   return (
     <div className="min-h-screen bg-background">
@@ -273,7 +276,7 @@ function Dashboard() {
             <div>
               <h1 className="text-xl font-semibold leading-none tracking-tight">PA Monitor</h1>
               <p className="text-xs text-secondary-foreground/70 mt-1.5">
-                Workshop physical availability · {monthLabel}
+                Workshop physical availability · {periodLabel}
               </p>
             </div>
           </div>
@@ -317,19 +320,22 @@ function Dashboard() {
           </div>
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="h-9 w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                    {m.value === currentMonthKey ? " (current)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              type="date"
+              value={fromDate}
+              max={toDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="h-9 w-[150px]"
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <Input
+              type="date"
+              value={toDate}
+              min={fromDate}
+              max={todayStr(clock)}
+              onChange={(e) => setToDate(e.target.value)}
+              className="h-9 w-[150px]"
+            />
           </div>
           <div className="flex items-center gap-2">
             <Wrench className="h-4 w-4 text-muted-foreground" />
@@ -365,14 +371,16 @@ function Dashboard() {
               </SelectContent>
             </Select>
           </div>
-          {(classFilter !== "all" || statusFilter !== "all" || !isCurrentMonth) && (
+          {(classFilter !== "all" || statusFilter !== "all" || !isCurrentPeriod) && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
                 setClassFilter("all");
                 setStatusFilter("all");
-                setSelectedMonth(currentMonthKey);
+                const d = clock;
+                setFromDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`);
+                setToDate(todayStr(d));
               }}
             >
               Reset
@@ -381,7 +389,7 @@ function Dashboard() {
           <div className="ml-auto text-xs text-muted-foreground">
             Showing <span className="font-semibold text-foreground">{enriched.length}</span>{" "}
             of {units.length} unit{units.length === 1 ? "" : "s"}
-            {!isCurrentMonth && (
+            {!isCurrentPeriod && (
               <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
                 Historical view
               </span>
@@ -438,7 +446,7 @@ function Dashboard() {
               </div>
               <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
-                  label={isCurrentMonth ? "Fleet PA (MTD)" : "Fleet PA"}
+                  label={isCurrentPeriod ? "Fleet PA (to date)" : "Fleet PA"}
                   value={formatPct(fleet.stats.paCurrent)}
                   hint={`Target ${formatPct(target)}`}
                   tone={paStatusLevel(fleet.stats.paCurrent, target)}
@@ -541,6 +549,7 @@ function Dashboard() {
                     onRegister={() => openCreate(e.unit.id)}
                     onUpdateOpen={() => e.open && setEditing(e.open)}
                     onFinishOpen={() => e.open && finishNow(e.open)}
+                    onOpenHistory={() => setHistoryUnit(e.unit)}
                   />
                 ))}
               </div>
@@ -621,6 +630,15 @@ function Dashboard() {
         startInNew={manageStartNew}
       />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <HistoryDialog
+        open={!!historyUnit}
+        onOpenChange={(v) => !v && setHistoryUnit(null)}
+        unit={historyUnit}
+        onEdit={(b) => {
+          setHistoryUnit(null);
+          setEditing(b);
+        }}
+      />
     </div>
   );
 }
@@ -699,7 +717,7 @@ function UnitCard({
   onFinishOpen,
 }: {
   unit: Unit;
-  stats: ReturnType<typeof computePA>;
+  stats: ReturnType<typeof computePARange>;
   level: Level;
   open: Breakdown | null;
   target: number;
@@ -962,15 +980,17 @@ function ListRow({
   onRegister,
   onUpdateOpen,
   onFinishOpen,
+  onOpenHistory,
 }: {
   unit: Unit;
-  stats: ReturnType<typeof computePA>;
+  stats: ReturnType<typeof computePARange>;
   level: Level;
   open: Breakdown | null;
   target: number;
   onRegister: () => void;
   onUpdateOpen: () => void;
   onFinishOpen: () => void;
+  onOpenHistory: () => void;
 }) {
   const max = Math.max(0.001, stats.maxAllowedDowntime);
   const usedPct = Math.min(100, Math.max(0, (stats.downtimeUsedHours / max) * 100));
@@ -994,8 +1014,21 @@ function ListRow({
   const tierLabel =
     tier === "high" ? "Safe" : tier === "low" ? "Critical" : "Downtime Over";
 
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[1fr_280px_120px_180px] items-center gap-4 px-4 py-3">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpenHistory}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenHistory();
+        }
+      }}
+      className="grid grid-cols-1 md:grid-cols-[1fr_280px_120px_180px] items-center gap-4 px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors focus:outline-none focus:bg-muted/40"
+    >
       <div className="min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-xs text-muted-foreground">{unit.code}</span>
@@ -1036,18 +1069,18 @@ function ListRow({
         </span>
       </div>
 
-      <div className="flex items-center gap-2 justify-start md:justify-end">
+      <div className="flex items-center gap-2 justify-start md:justify-end" onClick={stop}>
         {open ? (
           <>
-            <Button size="sm" variant="outline" onClick={onUpdateOpen}>
+            <Button size="sm" variant="outline" onClick={(e) => { stop(e); onUpdateOpen(); }}>
               <Pencil className="h-3.5 w-3.5 mr-1" /> Update
             </Button>
-            <Button size="sm" onClick={onFinishOpen}>
+            <Button size="sm" onClick={(e) => { stop(e); onFinishOpen(); }}>
               <Flag className="h-3.5 w-3.5 mr-1" /> Finish
             </Button>
           </>
         ) : (
-          <Button size="sm" variant="outline" onClick={onRegister}>
+          <Button size="sm" variant="outline" onClick={(e) => { stop(e); onRegister(); }}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Log
           </Button>
         )}
