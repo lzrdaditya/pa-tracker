@@ -118,37 +118,26 @@ function Dashboard() {
     return Array.from(s).sort();
   }, [units]);
 
-  const monthOptions = useMemo(() => {
-    const out: { value: string; label: string }[] = [];
-    const base = new Date(clock.getFullYear(), clock.getMonth(), 1);
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
-      const v = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      out.push({ value: v, label: d.toLocaleString(undefined, { month: "long", year: "numeric" }) });
-    }
-    return out;
-  }, [clock]);
-
   const downtimeByUnit = useMemo(() => {
     const map = new Map<string, number>();
     for (const b of breakdowns) {
       map.set(
         b.unit_id,
-        (map.get(b.unit_id) ?? 0) + hoursInMonth(b.started_at, b.finished_at, anchor),
+        (map.get(b.unit_id) ?? 0) + hoursInRange(b.started_at, b.finished_at, from, to, clock),
       );
     }
     return map;
-  }, [breakdowns, anchor]);
+  }, [breakdowns, from, to, clock]);
 
   const stoppageCountByUnit = useMemo(() => {
     const map = new Map<string, number>();
     for (const b of breakdowns) {
-      if (hoursInMonth(b.started_at, b.finished_at, anchor) > 0) {
+      if (hoursInRange(b.started_at, b.finished_at, from, to, clock) > 0) {
         map.set(b.unit_id, (map.get(b.unit_id) ?? 0) + 1);
       }
     }
     return map;
-  }, [breakdowns, anchor]);
+  }, [breakdowns, from, to, clock]);
 
   const openByUnit = useMemo(() => {
     const map = new Map<string, Breakdown>();
@@ -166,7 +155,7 @@ function Dashboard() {
     return units.map((u) => {
       const dt = downtimeByUnit.get(u.id) ?? 0;
       const stoppages = stoppageCountByUnit.get(u.id) ?? 0;
-      const stats = computePA(dt, target, anchor);
+      const stats = computePARange(dt, target, from, to, clock);
       const level: Level = paStatusLevel(stats.paCurrent, target);
       const open = openByUnit.get(u.id) ?? null;
       const mtbs = computeMTBS(stats.elapsedCalHours, dt, stoppages);
@@ -181,7 +170,7 @@ function Dashboard() {
       const maxNext = maxHoursNextRepair(dt, stoppages, u.mttr_target_hours);
       return { unit: u, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext };
     });
-  }, [units, downtimeByUnit, stoppageCountByUnit, target, openByUnit, anchor]);
+  }, [units, downtimeByUnit, stoppageCountByUnit, target, openByUnit, from, to, clock]);
 
   // Filtered baseline for Fleet KPIs and Lists
   const enriched = useMemo(() => {
@@ -191,7 +180,7 @@ function Dashboard() {
       .filter((e) => {
         if (statusFilter === "all") return true;
         if (statusFilter === "breakdown") return e.open !== null;
-        
+
         const max = Math.max(0.001, e.stats.maxAllowedDowntime);
         const usedPct = Math.min(100, Math.max(0, (e.stats.downtimeUsedHours / max) * 100));
         const remaining = e.stats.remainingAllowedDowntime;
@@ -200,7 +189,7 @@ function Dashboard() {
         if (statusFilter === "safe") return remaining > 0 && remainingPct >= 25;
         if (statusFilter === "critical") return remaining > 0 && remainingPct < 25;
         if (statusFilter === "over") return remaining <= 0;
-        
+
         return true;
       })
       .filter((e) =>
@@ -208,22 +197,29 @@ function Dashboard() {
       );
   }, [allEnriched, q, classFilter, statusFilter]);
 
+  // Average per-unit MTBS/MTTR (only units with stoppages contribute)
+  function avgOfPerUnit(items: typeof allEnriched, pick: (e: (typeof allEnriched)[number]) => number | null) {
+    const vals = items.map(pick).filter((v): v is number => v !== null && isFinite(v));
+    if (vals.length === 0) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }
+
   const fleet = useMemo(() => {
     const totalDown = enriched.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
     const totalStoppages = enriched.reduce((a, e) => a + e.stoppages, 0);
     const n = enriched.length || 1;
     const avgDown = totalDown / n;
-    const stats = computePA(avgDown, target, anchor);
+    const stats = computePARange(avgDown, target, from, to, clock);
     const critical = enriched.filter((e) => e.level === "bad").length;
     const warn = enriched.filter((e) => e.level === "warn").length;
     const ok = enriched.filter((e) => e.level === "ok").length;
     const enrichedIds = new Set(enriched.map((e) => e.unit.id));
     const activeCount = activeBreakdowns.filter((b) => enrichedIds.has(b.unit_id)).length;
-    const totalReady = enriched.reduce((a, e) => a + e.stats.elapsedCalHours, 0);
-    const mtbs = computeMTBS(totalReady, totalDown, totalStoppages);
-    const mttr = computeMTTR(totalDown, totalStoppages);
+    // Per-unit average — matches per-unit target scale
+    const mtbs = avgOfPerUnit(enriched, (e) => e.mtbs);
+    const mttr = avgOfPerUnit(enriched, (e) => e.mttr);
     return { stats, critical, warn, ok, activeCount, totalStoppages, mtbs, mttr };
-  }, [enriched, target, anchor, activeBreakdowns]);
+  }, [enriched, target, from, to, clock, activeBreakdowns]);
 
   // Per-class aggregation using UNFILTERED allEnriched data
   const classSummaries = useMemo(() => {
@@ -237,17 +233,16 @@ function Dashboard() {
       .map(([className, items]) => {
         const totalDown = items.reduce((a, e) => a + e.stats.downtimeUsedHours, 0);
         const totalStop = items.reduce((a, e) => a + e.stoppages, 0);
-        const totalReady = items.reduce((a, e) => a + e.stats.elapsedCalHours, 0);
         const avgDown = totalDown / items.length;
-        const stats = computePA(avgDown, target, anchor);
-        const mtbs = computeMTBS(totalReady, totalDown, totalStop);
-        const mttr = computeMTTR(totalDown, totalStop);
+        const stats = computePARange(avgDown, target, from, to, clock);
+        const mtbs = avgOfPerUnit(items, (e) => e.mtbs);
+        const mttr = avgOfPerUnit(items, (e) => e.mttr);
         const level = paStatusLevel(stats.paCurrent, target);
         const down = items.filter((i) => i.open).length;
         return { className, items, stats, mtbs, mttr, level, totalStop, down };
       })
       .sort((a, b) => a.className.localeCompare(b.className));
-  }, [allEnriched, target, anchor]);
+  }, [allEnriched, target, from, to, clock]);
 
   const openCreate = (unitId: string | null) => {
     setCreateUnitId(unitId);
