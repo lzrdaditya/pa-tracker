@@ -275,7 +275,7 @@ function Dashboard() {
             <div>
               <h1 className="text-xl font-semibold leading-none tracking-tight">PA Monitor</h1>
               <p className="text-xs text-secondary-foreground/70 mt-1.5">
-                Workshop physical availability · {monthLabel}
+                Workshop physical availability · {periodLabel}
               </p>
             </div>
           </div>
