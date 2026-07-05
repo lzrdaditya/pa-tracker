@@ -549,6 +549,7 @@ function Dashboard() {
                     onRegister={() => openCreate(e.unit.id)}
                     onUpdateOpen={() => e.open && setEditing(e.open)}
                     onFinishOpen={() => e.open && finishNow(e.open)}
+                    onOpenHistory={() => setHistoryUnit(e.unit)}
                   />
                 ))}
               </div>
