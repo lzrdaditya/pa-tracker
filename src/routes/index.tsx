@@ -444,7 +444,7 @@ function Dashboard() {
               </div>
               <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
-                  label={isCurrentMonth ? "Fleet PA (MTD)" : "Fleet PA"}
+                  label={isCurrentPeriod ? "Fleet PA (to date)" : "Fleet PA"}
                   value={formatPct(fleet.stats.paCurrent)}
                   hint={`Target ${formatPct(target)}`}
                   tone={paStatusLevel(fleet.stats.paCurrent, target)}
