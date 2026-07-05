@@ -3,18 +3,18 @@ import { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   useUnits,
-  useMonthBreakdowns,
+  useRangeBreakdowns,
   useSettings,
   useUpdateBreakdown,
   type Unit,
   type Breakdown,
 } from "@/lib/data";
 import {
-  computePA,
+  computePARange,
   formatHours,
   formatPct,
   paStatusLevel,
-  hoursInMonth,
+  hoursInRange,
   elapsedHours,
   formatDateTime,
   computeMTBS,
