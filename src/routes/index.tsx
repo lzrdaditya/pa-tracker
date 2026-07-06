@@ -317,20 +317,11 @@ function Dashboard() {
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
             <Input
-              type="date"
-              value={fromDate}
-              max={toDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="h-9 w-[150px]"
-            />
-            <span className="text-xs text-muted-foreground">to</span>
-            <Input
-              type="date"
-              value={toDate}
-              min={fromDate}
-              max={todayStr(clock)}
-              onChange={(e) => setToDate(e.target.value)}
-              className="h-9 w-[150px]"
+              type="month"
+              value={month}
+              max={monthStr(clock)}
+              onChange={(e) => setMonth(e.target.value)}
+              className="h-9 w-[170px]"
             />
           </div>
           <div className="flex items-center gap-2">
