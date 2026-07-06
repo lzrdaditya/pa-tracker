@@ -365,9 +365,7 @@ function Dashboard() {
               onClick={() => {
                 setClassFilter("all");
                 setStatusFilter("all");
-                const d = clock;
-                setFromDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`);
-                setToDate(todayStr(d));
+                setMonth(monthStr(clock));
               }}
             >
               Reset
