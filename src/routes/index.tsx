@@ -78,27 +78,23 @@ function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const todayStr = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const [fromDate, setFromDate] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-  });
-  const [toDate, setToDate] = useState<string>(() => todayStr(new Date()));
+  const monthStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const [month, setMonth] = useState<string>(() => monthStr(new Date()));
   const [classFilter, setClassFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const from = useMemo(() => {
-    const [y, m, d] = fromDate.split("-").map(Number);
-    return new Date(y, m - 1, d, 0, 0, 0, 0);
-  }, [fromDate]);
+    const [y, m] = month.split("-").map(Number);
+    return new Date(y, m - 1, 1, 0, 0, 0, 0);
+  }, [month]);
   const to = useMemo(() => {
-    const [y, m, d] = toDate.split("-").map(Number);
-    return new Date(y, m - 1, d, 23, 59, 59, 999);
-  }, [toDate]);
+    const [y, m] = month.split("-").map(Number);
+    return new Date(y, m, 1, 0, 0, 0, 0);
+  }, [month]);
 
-  const isCurrentPeriod = to.getTime() >= clock.getTime();
-  const anchor = clock < to ? clock : to;
+  const isCurrentPeriod = monthStr(clock) === month;
+  const anchor = isCurrentPeriod ? clock : new Date(to.getTime() - 1);
 
   const { data: breakdowns = [] } = useRangeBreakdowns(from, to);
 
@@ -321,20 +317,11 @@ function Dashboard() {
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
             <Input
-              type="date"
-              value={fromDate}
-              max={toDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="h-9 w-[150px]"
-            />
-            <span className="text-xs text-muted-foreground">to</span>
-            <Input
-              type="date"
-              value={toDate}
-              min={fromDate}
-              max={todayStr(clock)}
-              onChange={(e) => setToDate(e.target.value)}
-              className="h-9 w-[150px]"
+              type="month"
+              value={month}
+              max={monthStr(clock)}
+              onChange={(e) => setMonth(e.target.value)}
+              className="h-9 w-[170px]"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -378,9 +365,7 @@ function Dashboard() {
               onClick={() => {
                 setClassFilter("all");
                 setStatusFilter("all");
-                const d = clock;
-                setFromDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`);
-                setToDate(todayStr(d));
+                setMonth(monthStr(clock));
               }}
             >
               Reset
