@@ -34,7 +34,7 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
 
   const [unitId, setUnitId] = useState<string>(defaultUnitId ?? "");
   const [startedAt, setStartedAt] = useState<string>(toLocalInput());
-  const [finishedAt, setFinishedAt] = useState<string>( "");
+  const [finishedAt, setFinishedAt] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
 
   useEffect(() => {
@@ -67,34 +67,11 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
   const save = async () => {
     if (!unitId) return toast.error("Select a unit");
     if (!startedAt) return toast.error("Start time required");
-
-    const isValidTime = (time: string) => {
-      const match = /^(\d{2}):(\d{2})$/.exec(time);
-      if (!match) return false;
-      const hh = Number(match[1]);
-      const mm = Number(match[2]);
-      return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59;
-    };
-
-    const startedTime = startedAt.split("T")[1];
-    if (!startedTime || !isValidTime(startedTime)) {
-      return toast.error("Invalid start time. Use HH:mm format.");
-    }
-
-    if (finishedAt) {
-      const finishedTime = finishedAt.split("T")[1];
-      if (!finishedTime || !isValidTime(finishedTime)) {
-        return toast.error("Invalid finish time. Use HH:mm format.");
-      }
-    }
-
     const started_iso = fromLocalInput(startedAt);
     const finished_iso = finishedAt ? fromLocalInput(finishedAt) : null;
-    
     if (finished_iso && new Date(finished_iso) < new Date(started_iso)) {
       return toast.error("Finish time must be after start");
     }
-
     try {
       if (mode === "edit" && breakdown) {
         await update.mutateAsync({
@@ -268,77 +245,30 @@ function DateTime24({
   onChange: (v: string) => void;
   allowEmpty?: boolean;
 }) {
-  const [datePart, timePart = ""] = value ? value.split("T") : ["", ""];
-
-  const emit = (date: string, time: string) => {
-    if (!date && !time) {
-      onChange("");
-      return;
-    }
-
-    const safeDate = date || new Date().toISOString().split("T")[0];
-
-    if (allowEmpty && !time) {
-      onChange("");
-      return;
-    }
-
-    onChange(`${safeDate}T${time}`);
-  };
-
-  const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value;
-
-    // Allow digits only
-    val = val.replace(/\D/g, "");
-
-    // Auto-format as HH:mm
-    if (val.length >= 3) {
-      val = `${val.slice(0, 2)}:${val.slice(2, 4)}`;
-    }
-
-    // Limit length
-    val = val.slice(0, 5);
-
-    emit(datePart, val);
-  };
-
-  const handleBlur = () => {
-    if (!timePart) return;
-
-    const match = /^(\d{2}):(\d{2})$/.exec(timePart);
-
-    if (!match) {
-      toast.error("Time must be in HH:mm format");
-      return;
-    }
-
-    const hh = Number(match[1]);
-    const mm = Number(match[2]);
-
-    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) {
-      toast.error("Time must be between 00:00 and 23:59");
-    }
+  const [datePart, timePart] = value ? value.split("T") : ["", ""];
+  const emit = (d: string, t: string) => {
+    if (!d && !t) return onChange("");
+    const safeD = d || new Date().toISOString().slice(0, 10);
+    const safeT = t || "00:00";
+    onChange(`${safeD}T${safeT.slice(0, 5)}`);
   };
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row">
+    <div className="grid grid-cols-1 xs:grid-cols-[1fr_auto] gap-2 min-w-0">
       <Input
         type="date"
+        className="w-full min-w-0"
         value={datePart}
-        className="w-full"
         onChange={(e) => emit(e.target.value, timePart)}
       />
-
       <Input
-        type="text"
-        inputMode="numeric"
-        placeholder={allowEmpty ? "--:--" : "HH:mm"}
-        value={timePart}
-        maxLength={5}
-        onChange={handleTimeChange}
-        onBlur={handleBlur}
-        className="w-full sm:w-[120px] font-mono"
+        type="time"
+        lang="en-GB" // Enforces European/24-hour style input formatting
+        step={60}
+        className="w-full xs:w-[110px] font-mono tabular"
+        value={timePart ? timePart.slice(0, 5) : ""}
+        placeholder={allowEmpty ? "--:--" : "HH:MM"}
+        onChange={(e) => emit(datePart, e.target.value)}
       />
     </div>
   );
