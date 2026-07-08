@@ -113,7 +113,7 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="w-[90vw] max-w-md sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {title}
@@ -263,4 +263,3 @@ function DateTime24({
     </div>
   );
 }
-
