@@ -29,6 +29,15 @@ interface Props { open: boolean; onOpenChange: (v: boolean) => void; startInNew?
 export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
   const { data: units = [] } = useUnits();
   const { data: settings } = useSettings();
+  const classOptions = useMemo(() => {
+    const s = new Set<string>(DEFAULT_UNIT_CLASSES);
+    for (const u of units) {
+      const c = (u.notes ?? "").trim();
+      if (c) s.add(c);
+    }
+    return Array.from(s).sort();
+  }, [units]);
+
   const save = useSaveUnit();
   const del = useDeleteUnit();
 
