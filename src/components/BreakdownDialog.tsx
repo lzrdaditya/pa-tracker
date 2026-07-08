@@ -246,12 +246,16 @@ function DateTime24({
   allowEmpty?: boolean;
 }) {
   const [datePart, timePart] = value ? value.split("T") : ["", ""];
+  
   const emit = (d: string, t: string) => {
     if (!d && !t) return onChange("");
     const safeD = d || new Date().toISOString().slice(0, 10);
     const safeT = t || "00:00";
     onChange(`${safeD}T${safeT.slice(0, 5)}`);
   };
+
+  // Ensure the time string ends with seconds ':00' to break browser forced AM/PM localization thresholds
+  const parsedTimeValue = timePart ? `${timePart.slice(0, 5)}:00` : "";
 
   return (
     <div className="grid grid-cols-1 xs:grid-cols-[1fr_auto] gap-2 min-w-0">
@@ -263,10 +267,10 @@ function DateTime24({
       />
       <Input
         type="time"
-        lang="en-GB" // Enforces European/24-hour style input formatting
+        lang="en-GB"
         step={60}
         className="w-full xs:w-[110px] font-mono tabular"
-        value={timePart ? timePart.slice(0, 5) : ""}
+        value={parsedTimeValue}
         placeholder={allowEmpty ? "--:--" : "HH:MM"}
         onChange={(e) => emit(datePart, e.target.value)}
       />
