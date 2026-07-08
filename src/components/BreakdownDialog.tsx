@@ -152,12 +152,9 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label>Breakdown started</Label>
-              <Input
-                type="datetime-local"
-                lang="en-GB"
-                step={60}
+              <DateTime24
                 value={startedAt}
-                onChange={(e) => setStartedAt(e.target.value)}
+                onChange={setStartedAt}
               />
             </div>
             <div className="grid gap-2">
@@ -171,13 +168,10 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
                   Set now
                 </button>
               </Label>
-              <Input
-                type="datetime-local"
-                lang="en-GB"
-                step={60}
+              <DateTime24
                 value={finishedAt}
-                onChange={(e) => setFinishedAt(e.target.value)}
-                placeholder="Still running"
+                onChange={setFinishedAt}
+                allowEmpty
               />
 
               {!finishedAt && (
@@ -185,6 +179,7 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
               )}
             </div>
           </div>
+
 
           <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm flex items-center justify-between">
             <span className="text-muted-foreground">Elapsed downtime</span>
