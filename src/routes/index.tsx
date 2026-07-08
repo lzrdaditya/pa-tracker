@@ -167,16 +167,17 @@ function Dashboard() {
       const stats = computePARange(dt, target, from, to, clock);
       const level: Level = paStatusLevel(stats.paCurrent, target);
       const open = openByUnit.get(u.id) ?? null;
-      const mtbs = computeMTBS(stats.elapsedCalHours, dt, stoppages);
+      const mtbs = computeMTBS(stats.calTimeHours, dt, stoppages);
       const mttr = computeMTTR(dt, stoppages);
       const remStop = remainingStoppages(
-        stats.elapsedCalHours,
+        stats.calTimeHours,
         dt,
         stoppages,
         u.mtbs_target_hours,
       );
       const remMttr = remainingMttrBudget(dt, stoppages, u.mttr_target_hours);
       const maxNext = maxHoursNextRepair(dt, stoppages, u.mttr_target_hours);
+
       return { unit: u, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext };
     });
   }, [units, downtimeByUnit, stoppageCountByUnit, target, openByUnit, from, to, clock]);
