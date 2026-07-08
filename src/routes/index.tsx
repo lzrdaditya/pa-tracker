@@ -14,7 +14,7 @@ import {
   formatHours,
   formatPct,
   paStatusLevel,
-  hoursInRange,
+  unionHoursInRange,
   elapsedHours,
   formatDateTime,
   computeMTBS,
@@ -25,6 +25,7 @@ import {
   maxHoursNextRepair,
   budgetStatus,
 } from "@/lib/pa";
+
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -115,26 +116,37 @@ function Dashboard() {
     return Array.from(s).sort();
   }, [units]);
 
-  const downtimeByUnit = useMemo(() => {
-    const map = new Map<string, number>();
+  const breakdownsByUnit = useMemo(() => {
+    const map = new Map<string, Breakdown[]>();
     for (const b of breakdowns) {
-      map.set(
-        b.unit_id,
-        (map.get(b.unit_id) ?? 0) + hoursInRange(b.started_at, b.finished_at, from, to, clock),
-      );
+      const arr = map.get(b.unit_id) ?? [];
+      arr.push(b);
+      map.set(b.unit_id, arr);
     }
     return map;
-  }, [breakdowns, from, to, clock]);
+  }, [breakdowns]);
+
+  const downtimeByUnit = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [uid, list] of breakdownsByUnit) {
+      map.set(uid, unionHoursInRange(list, from, to, clock));
+    }
+    return map;
+  }, [breakdownsByUnit, from, to, clock]);
 
   const stoppageCountByUnit = useMemo(() => {
     const map = new Map<string, number>();
-    for (const b of breakdowns) {
-      if (hoursInRange(b.started_at, b.finished_at, from, to, clock) > 0) {
-        map.set(b.unit_id, (map.get(b.unit_id) ?? 0) + 1);
-      }
+    for (const [uid, list] of breakdownsByUnit) {
+      const n = list.filter((b) => {
+        const s = new Date(b.started_at).getTime();
+        const e = (b.finished_at ? new Date(b.finished_at) : clock).getTime();
+        return s < to.getTime() && e > from.getTime();
+      }).length;
+      if (n > 0) map.set(uid, n);
     }
     return map;
-  }, [breakdowns, from, to, clock]);
+  }, [breakdownsByUnit, from, to, clock]);
+
 
   const openByUnit = useMemo(() => {
     const map = new Map<string, Breakdown>();
