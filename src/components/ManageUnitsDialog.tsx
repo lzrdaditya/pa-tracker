@@ -10,17 +10,12 @@ import { useUnits, useSaveUnit, useDeleteUnit, useSettings, type Unit } from "@/
 import { Pencil, Trash2, Plus, X } from "lucide-react";
 
 const DEFAULT_UNIT_CLASSES = [
-  "Dump Truck",
-  "Small Excavator",
-  "Big Excavator",
-  "Bulldozer",
-  "Wheel Loader",
-  "Motor Grader",
-  "Compactor",
-  "Water Truck",
-  "Fuel Truck",
-  "Light Vehicle",
-  "Support Equipment",
+  "DIGGER",
+  "DOZER",
+  "DRILLING",
+  "DUMP TRUCK",
+  "SMALL EXCAVATOR",
+  "GRADER",
 ];
 
 
