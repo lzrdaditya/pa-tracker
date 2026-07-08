@@ -1,18 +1,43 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useUnits, useSaveUnit, useDeleteUnit, useSettings, type Unit } from "@/lib/data";
 import { Pencil, Trash2, Plus, X } from "lucide-react";
+
+const DEFAULT_UNIT_CLASSES = [
+  "Dump Truck",
+  "Small Excavator",
+  "Big Excavator",
+  "Bulldozer",
+  "Wheel Loader",
+  "Motor Grader",
+  "Compactor",
+  "Water Truck",
+  "Fuel Truck",
+  "Light Vehicle",
+  "Support Equipment",
+];
+
 
 interface Props { open: boolean; onOpenChange: (v: boolean) => void; startInNew?: boolean }
 
 export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
   const { data: units = [] } = useUnits();
   const { data: settings } = useSettings();
+  const classOptions = useMemo(() => {
+    const s = new Set<string>(DEFAULT_UNIT_CLASSES);
+    for (const u of units) {
+      const c = (u.notes ?? "").trim();
+      if (c) s.add(c);
+    }
+    return Array.from(s).sort();
+  }, [units]);
+
   const save = useSaveUnit();
   const del = useDeleteUnit();
 
@@ -114,13 +139,41 @@ export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label>Notes</Label>
-              <Textarea
-                rows={2}
-                value={editing.notes ?? ""}
-                onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
-              />
+              <Label>Unit class</Label>
+              <Select
+                value={
+                  editing.notes && classOptions.includes(editing.notes)
+                    ? editing.notes
+                    : editing.notes
+                      ? "__custom"
+                      : ""
+                }
+                onValueChange={(v) => {
+                  if (v === "__custom") setEditing({ ...editing, notes: "" });
+                  else setEditing({ ...editing, notes: v });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select unit class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {classOptions.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                  <SelectItem value="__custom">Other (custom)…</SelectItem>
+                </SelectContent>
+              </Select>
+              {(editing.notes !== undefined &&
+                editing.notes !== null &&
+                !classOptions.includes(editing.notes)) && (
+                <Input
+                  placeholder="Type custom class name"
+                  value={editing.notes ?? ""}
+                  onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
+                />
+              )}
             </div>
+
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setEditing(null)}>

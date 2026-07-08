@@ -152,12 +152,9 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label>Breakdown started</Label>
-              <Input
-                type="datetime-local"
-                lang="en-GB"
-                step={60}
+              <DateTime24
                 value={startedAt}
-                onChange={(e) => setStartedAt(e.target.value)}
+                onChange={setStartedAt}
               />
             </div>
             <div className="grid gap-2">
@@ -171,13 +168,10 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
                   Set now
                 </button>
               </Label>
-              <Input
-                type="datetime-local"
-                lang="en-GB"
-                step={60}
+              <DateTime24
                 value={finishedAt}
-                onChange={(e) => setFinishedAt(e.target.value)}
-                placeholder="Still running"
+                onChange={setFinishedAt}
+                allowEmpty
               />
 
               {!finishedAt && (
@@ -185,6 +179,7 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
               )}
             </div>
           </div>
+
 
           <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm flex items-center justify-between">
             <span className="text-muted-foreground">Elapsed downtime</span>
@@ -227,3 +222,45 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
     </Dialog>
   );
 }
+
+/**
+ * Date + 24h time input pair. Splitting avoids browser locales that force
+ * AM/PM in <input type="datetime-local">. Value is the same
+ * "YYYY-MM-DDTHH:MM" string produced by toLocalInput().
+ */
+function DateTime24({
+  value,
+  onChange,
+  allowEmpty,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  allowEmpty?: boolean;
+}) {
+  const [datePart, timePart] = value ? value.split("T") : ["", ""];
+  const emit = (d: string, t: string) => {
+    if (!d && !t) return onChange("");
+    const safeD = d || new Date().toISOString().slice(0, 10);
+    const safeT = t || "00:00";
+    onChange(`${safeD}T${safeT.slice(0, 5)}`);
+  };
+  return (
+    <div className="grid grid-cols-[1fr_auto] gap-2">
+      <Input
+        type="date"
+        value={datePart}
+        onChange={(e) => emit(e.target.value, timePart)}
+      />
+      <Input
+        type="time"
+        lang="en-GB"
+        step={60}
+        className="w-[110px] font-mono tabular"
+        value={timePart ? timePart.slice(0, 5) : ""}
+        placeholder={allowEmpty ? "--:--" : "HH:MM"}
+        onChange={(e) => emit(datePart, e.target.value)}
+      />
+    </div>
+  );
+}
+
