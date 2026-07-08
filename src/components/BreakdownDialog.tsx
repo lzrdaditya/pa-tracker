@@ -113,7 +113,8 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[90vw] max-w-md sm:max-w-lg">
+      {/* Added max-h-[90dvh] and overflow-y-auto here to constrain height and allow scrolling */}
+      <DialogContent className="w-[90vw] max-w-md sm:max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {title}
