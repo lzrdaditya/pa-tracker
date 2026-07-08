@@ -154,6 +154,8 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
               <Label>Breakdown started</Label>
               <Input
                 type="datetime-local"
+                lang="en-GB"
+                step={60}
                 value={startedAt}
                 onChange={(e) => setStartedAt(e.target.value)}
               />
@@ -171,10 +173,13 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
               </Label>
               <Input
                 type="datetime-local"
+                lang="en-GB"
+                step={60}
                 value={finishedAt}
                 onChange={(e) => setFinishedAt(e.target.value)}
                 placeholder="Still running"
               />
+
               {!finishedAt && (
                 <p className="text-xs text-muted-foreground">Leave empty while still down.</p>
               )}
