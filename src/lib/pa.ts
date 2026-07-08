@@ -202,6 +202,44 @@ export function hoursInMonth(
   return ms > 0 ? ms / 3_600_000 : 0;
 }
 
+/**
+ * Sum downtime hours across multiple breakdowns for the SAME unit within a range,
+ * merging overlapping intervals so concurrent/duplicate records aren't double-counted.
+ */
+export function unionHoursInRange(
+  intervals: Array<{ started_at: string; finished_at: string | null }>,
+  from: Date,
+  to: Date,
+  now: Date = new Date(),
+) {
+  const cap = now < to ? now : to;
+  const clipped: Array<[number, number]> = [];
+  for (const b of intervals) {
+    const s = new Date(b.started_at).getTime();
+    const e = (b.finished_at ? new Date(b.finished_at) : now).getTime();
+    const lo = Math.max(s, from.getTime());
+    const hi = Math.min(e, cap.getTime());
+    if (hi > lo) clipped.push([lo, hi]);
+  }
+  if (clipped.length === 0) return 0;
+  clipped.sort((a, b) => a[0] - b[0]);
+  let total = 0;
+  let [curLo, curHi] = clipped[0];
+  for (let i = 1; i < clipped.length; i++) {
+    const [lo, hi] = clipped[i];
+    if (lo <= curHi) {
+      if (hi > curHi) curHi = hi;
+    } else {
+      total += curHi - curLo;
+      curLo = lo;
+      curHi = hi;
+    }
+  }
+  total += curHi - curLo;
+  return total / 3_600_000;
+}
+
+
 /** Total elapsed hours of a breakdown regardless of month (for display). */
 export function elapsedHours(
   startedAt: string,
