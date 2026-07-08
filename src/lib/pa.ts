@@ -141,10 +141,12 @@ export function computePARange(
   const effectiveEnd = now < periodEnd ? now : periodEnd;
   const calTimeHours = Math.max(0, (periodEnd.getTime() - from.getTime()) / 3_600_000);
   const elapsedCalHours = Math.max(0, (effectiveEnd.getTime() - from.getTime()) / 3_600_000);
-  const paCurrent =
-    elapsedCalHours > 0 ? (elapsedCalHours - downtimeHours) / elapsedCalHours : 1;
+  // Monthly-basis PA: use full period calendar hours as denominator so a unit
+  // that has been down for N days out of a 31-day month reflects (31-N)/31,
+  // not (elapsed-N)/elapsed which drops to 0 early in the month.
   const paMonthProjected =
     calTimeHours > 0 ? (calTimeHours - downtimeHours) / calTimeHours : 1;
+  const paCurrent = paMonthProjected;
   const maxAllowedDowntime = calTimeHours * (1 - target);
   const remainingAllowedDowntime = maxAllowedDowntime - downtimeHours;
   return {
@@ -159,6 +161,7 @@ export function computePARange(
     daysInMonth: Math.max(1, Math.ceil(calTimeHours / 24)),
     dayOfMonth: Math.max(0, Math.ceil(elapsedCalHours / 24)),
   };
+
 }
 
 /** Overlap of a breakdown with an arbitrary date range, capped at now. */
