@@ -226,10 +226,12 @@ export function fromLocalInput(v: string) {
 
 export function formatDateTime(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString("en-GB", {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 }
+
