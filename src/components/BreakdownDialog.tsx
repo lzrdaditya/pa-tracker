@@ -113,8 +113,7 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Removed default padding, added flex column and max height */}
-      <DialogContent className="w-[90vw] max-w-md sm:max-w-lg max-h-[90dvh] flex flex-col p-0">
+      <DialogContent className="w-[90vw] max-w-md sm:max-w-lg max-h-[90dvh] flex flex-col p-0 overflow-hidden">
         
         {/* Pinned Header */}
         <DialogHeader className="px-6 pt-6 pb-2">
@@ -129,8 +128,10 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
         </DialogHeader>
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-2">
-          <div className="grid gap-4">
+        <div className="flex-1 overflow-y-auto px-6 py-2 min-h-0">
+          <div className="grid gap-5">
+            
+            {/* Unit Selection */}
             <div className="grid gap-2">
               <Label>Unit</Label>
               <Select
@@ -154,15 +155,16 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
+            {/* Timestamps Field Block (Stack vertically on micro-screens, safe grid on desktop) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-2 min-w-0">
                 <Label>Breakdown started</Label>
                 <DateTime24
                   value={startedAt}
                   onChange={setStartedAt}
                 />
               </div>
-              <div className="grid gap-2">
+              <div className="grid gap-2 min-w-0">
                 <Label className="flex items-center justify-between">
                   <span>Finished</span>
                   <button
@@ -178,20 +180,21 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
                   onChange={setFinishedAt}
                   allowEmpty
                 />
-
                 {!finishedAt && (
                   <p className="text-xs text-muted-foreground">Leave empty while still down.</p>
                 )}
               </div>
             </div>
 
-            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm flex items-center justify-between">
+            {/* Calculated Downtime read-only output strip */}
+            <div className="rounded-md border bg-muted/40 px-3 py-2.5 text-sm flex items-center justify-between">
               <span className="text-muted-foreground">Elapsed downtime</span>
               <span className="font-mono tabular font-semibold">
                 {formatHours(currentElapsed)}
               </span>
             </div>
 
+            {/* Log Entry Action Notes */}
             <div className="grid gap-2">
               <Label>Notes</Label>
               <Textarea
@@ -204,8 +207,8 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
           </div>
         </div>
 
-        {/* Pinned Footer */}
-        <DialogFooter className="gap-2 sm:justify-between px-6 pt-2 pb-6 border-t mt-2">
+        {/* Pinned Action Controls Footer */}
+        <DialogFooter className="gap-2 sm:justify-between px-6 pt-3 pb-6 border-t mt-2 bg-background">
           <div>
             {mode === "edit" && (
               <Button variant="ghost" size="sm" onClick={remove} className="text-destructive hover:text-destructive">
@@ -231,9 +234,8 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
 }
 
 /**
- * Date + 24h time input pair. Splitting avoids browser locales that force
- * AM/PM in <input type="datetime-local">. Value is the same
- * "YYYY-MM-DDTHH:MM" string produced by toLocalInput().
+ * Cleaned Date + 24h Time Layout.
+ * Uses a grid layout that adjusts responsively on columns to prevent layout overlapping on smaller screens.
  */
 function DateTime24({
   value,
@@ -251,10 +253,12 @@ function DateTime24({
     const safeT = t || "00:00";
     onChange(`${safeD}T${safeT.slice(0, 5)}`);
   };
+
   return (
-    <div className="grid grid-cols-[1fr_auto] gap-2">
+    <div className="grid grid-cols-1 xs:grid-cols-[1fr_auto] gap-2 min-w-0">
       <Input
         type="date"
+        className="w-full min-w-0"
         value={datePart}
         onChange={(e) => emit(e.target.value, timePart)}
       />
@@ -262,7 +266,7 @@ function DateTime24({
         type="time"
         lang="en-GB"
         step={60}
-        className="w-[110px] font-mono tabular"
+        className="w-full xs:w-[110px] font-mono tabular"
         value={timePart ? timePart.slice(0, 5) : ""}
         placeholder={allowEmpty ? "--:--" : "HH:MM"}
         onChange={(e) => emit(datePart, e.target.value)}
