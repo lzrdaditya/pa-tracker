@@ -130,13 +130,41 @@ export function ManageUnitsDialog({ open, onOpenChange, startInNew }: Props) {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label>Notes</Label>
-              <Textarea
-                rows={2}
-                value={editing.notes ?? ""}
-                onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
-              />
+              <Label>Unit class</Label>
+              <Select
+                value={
+                  editing.notes && classOptions.includes(editing.notes)
+                    ? editing.notes
+                    : editing.notes
+                      ? "__custom"
+                      : ""
+                }
+                onValueChange={(v) => {
+                  if (v === "__custom") setEditing({ ...editing, notes: "" });
+                  else setEditing({ ...editing, notes: v });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select unit class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {classOptions.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                  <SelectItem value="__custom">Other (custom)…</SelectItem>
+                </SelectContent>
+              </Select>
+              {(editing.notes !== undefined &&
+                editing.notes !== null &&
+                !classOptions.includes(editing.notes)) && (
+                <Input
+                  placeholder="Type custom class name"
+                  value={editing.notes ?? ""}
+                  onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
+                />
+              )}
             </div>
+
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setEditing(null)}>
