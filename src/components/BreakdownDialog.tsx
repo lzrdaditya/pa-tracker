@@ -155,7 +155,7 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
               )}
             </div>
 
-            {/* Timestamps Field Block (Stack vertically on micro-screens, safe grid on desktop) */}
+            {/* Timestamps Field Block */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-2 min-w-0">
                 <Label>Breakdown started</Label>
@@ -234,8 +234,7 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
 }
 
 /**
- * Cleaned Date + 24h Time Layout.
- * Uses a grid layout that adjusts responsively on columns to prevent layout overlapping on smaller screens.
+ * Enforced 24-hour format date + time input pair.
  */
 function DateTime24({
   value,
@@ -264,7 +263,7 @@ function DateTime24({
       />
       <Input
         type="time"
-        lang="en-GB"
+        lang="en-GB" // Enforces European/24-hour style input formatting
         step={60}
         className="w-full xs:w-[110px] font-mono tabular"
         value={timePart ? timePart.slice(0, 5) : ""}
