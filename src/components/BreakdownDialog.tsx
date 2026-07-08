@@ -113,9 +113,11 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Added max-h-[90dvh] and overflow-y-auto here to constrain height and allow scrolling */}
-      <DialogContent className="w-[90vw] max-w-md sm:max-w-lg max-h-[90dvh] overflow-y-auto">
-        <DialogHeader>
+      {/* Removed default padding, added flex column and max height */}
+      <DialogContent className="w-[90vw] max-w-md sm:max-w-lg max-h-[90dvh] flex flex-col p-0">
+        
+        {/* Pinned Header */}
+        <DialogHeader className="px-6 pt-6 pb-2">
           <DialogTitle className="flex items-center gap-2">
             {title}
             {running && (
@@ -126,81 +128,84 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label>Unit</Label>
-            <Select
-              value={unitId}
-              onValueChange={setUnitId}
-              disabled={mode === "edit" || !!defaultUnitId}
-            >
-              <SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger>
-              <SelectContent>
-                {units.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.code} — {u.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {unit && (
-              <p className="text-xs text-muted-foreground">
-                {unit.code} · {unit.name}
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-2">
+          <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label>Breakdown started</Label>
-              <DateTime24
-                value={startedAt}
-                onChange={setStartedAt}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label className="flex items-center justify-between">
-                <span>Finished</span>
-                <button
-                  type="button"
-                  onClick={finishNow}
-                  className="text-xs text-primary hover:underline"
-                >
-                  Set now
-                </button>
-              </Label>
-              <DateTime24
-                value={finishedAt}
-                onChange={setFinishedAt}
-                allowEmpty
-              />
-
-              {!finishedAt && (
-                <p className="text-xs text-muted-foreground">Leave empty while still down.</p>
+              <Label>Unit</Label>
+              <Select
+                value={unitId}
+                onValueChange={setUnitId}
+                disabled={mode === "edit" || !!defaultUnitId}
+              >
+                <SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger>
+                <SelectContent>
+                  {units.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.code} — {u.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {unit && (
+                <p className="text-xs text-muted-foreground">
+                  {unit.code} · {unit.name}
+                </p>
               )}
             </div>
-          </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label>Breakdown started</Label>
+                <DateTime24
+                  value={startedAt}
+                  onChange={setStartedAt}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label className="flex items-center justify-between">
+                  <span>Finished</span>
+                  <button
+                    type="button"
+                    onClick={finishNow}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Set now
+                  </button>
+                </Label>
+                <DateTime24
+                  value={finishedAt}
+                  onChange={setFinishedAt}
+                  allowEmpty
+                />
 
-          <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm flex items-center justify-between">
-            <span className="text-muted-foreground">Elapsed downtime</span>
-            <span className="font-mono tabular font-semibold">
-              {formatHours(currentElapsed)}
-            </span>
-          </div>
+                {!finishedAt && (
+                  <p className="text-xs text-muted-foreground">Leave empty while still down.</p>
+                )}
+              </div>
+            </div>
 
-          <div className="grid gap-2">
-            <Label>Notes</Label>
-            <Textarea
-              rows={2}
-              placeholder="Failure mode, work order, technician..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm flex items-center justify-between">
+              <span className="text-muted-foreground">Elapsed downtime</span>
+              <span className="font-mono tabular font-semibold">
+                {formatHours(currentElapsed)}
+              </span>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Notes</Label>
+              <Textarea
+                rows={2}
+                placeholder="Failure mode, work order, technician..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-between">
+        {/* Pinned Footer */}
+        <DialogFooter className="gap-2 sm:justify-between px-6 pt-2 pb-6 border-t mt-2">
           <div>
             {mode === "edit" && (
               <Button variant="ghost" size="sm" onClick={remove} className="text-destructive hover:text-destructive">
@@ -219,6 +224,7 @@ export function BreakdownDialog({ open, onOpenChange, mode, defaultUnitId, break
             </Button>
           </div>
         </DialogFooter>
+        
       </DialogContent>
     </Dialog>
   );
