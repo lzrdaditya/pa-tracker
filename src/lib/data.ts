@@ -50,23 +50,34 @@ export const getUnitsFn = createServerFn({ method: "GET" })
 
 export const getSettingsFn = createServerFn({ method: "GET" })
   .handler(async (): Promise<Settings> => {
-    const rows = await sql`
-      SELECT id, pa_target::float, mtbs_target_hours::float, mttr_target_hours::float 
-      FROM public.app_settings 
-      WHERE id = 1
-    `;
-    if (!rows[0]) return { id: 1, pa_target: 0.9, mtbs_target_hours: 65, mttr_target_hours: 10 };
-    return {
-      id: rows[0].id,
-      pa_target: Number(rows[0].pa_target),
-      mtbs_target_hours: Number(rows[0].mtbs_target_hours),
-      mttr_target_hours: Number(rows[0].mttr_target_hours)
-    };
+    try {
+      // Ensure the default row always exists
+      await sql`
+        INSERT INTO public.app_settings (id, pa_target, mtbs_target_hours, mttr_target_hours)
+        VALUES (1, 0.9, 65, 10)
+        ON CONFLICT (id) DO NOTHING
+      `;
+      const rows = await sql`
+        SELECT id, pa_target::float, mtbs_target_hours::float, mttr_target_hours::float 
+        FROM public.app_settings 
+        WHERE id = 1
+      `;
+      if (!rows[0]) return { id: 1, pa_target: 0.9, mtbs_target_hours: 65, mttr_target_hours: 10 };
+      return {
+        id: rows[0].id,
+        pa_target: Number(rows[0].pa_target),
+        mtbs_target_hours: Number(rows[0].mtbs_target_hours),
+        mttr_target_hours: Number(rows[0].mttr_target_hours)
+      };
+    } catch (e) {
+      console.error("getSettingsFn error:", e);
+      return { id: 1, pa_target: 0.9, mtbs_target_hours: 65, mttr_target_hours: 10 };
+    }
   });
 
 export const getRangeBreakdownsFn = createServerFn({ method: "GET" })
   .validator((d: { from: string; to: string }) => d)
-  .handler(async ({ from, to }): Promise<Breakdown[]> => {
+  .handler(async ({ data: { from, to } }): Promise<Breakdown[]> => {
     const rows = await sql`
       SELECT id, unit_id, started_at, finished_at, notes 
       FROM public.breakdowns 
@@ -85,7 +96,7 @@ export const getRangeBreakdownsFn = createServerFn({ method: "GET" })
 
 export const getUnitBreakdownsFn = createServerFn({ method: "GET" })
   .validator((unitId: string) => unitId)
-  .handler(async (unitId): Promise<Breakdown[]> => {
+  .handler(async ({ data: unitId }): Promise<Breakdown[]> => {
     const rows = await sql`
       SELECT id, unit_id, started_at, finished_at, notes 
       FROM public.breakdowns 
@@ -109,7 +120,7 @@ export const createBreakdownFn = createServerFn({ method: "POST" })
     finished_at?: string | null;
     notes?: string | null;
   }) => input)
-  .handler(async (input) => {
+  .handler(async ({ data: input }) => {
     await sql`
       INSERT INTO public.breakdowns (unit_id, started_at, finished_at, notes) 
       VALUES (${input.unit_id}, ${input.started_at}, ${input.finished_at || null}, ${input.notes || null})
@@ -123,7 +134,7 @@ export const updateBreakdownFn = createServerFn({ method: "POST" })
     finished_at?: string | null;
     notes?: string | null;
   }) => input)
-  .handler(async (input) => {
+  .handler(async ({ data: input }) => {
     const { id } = input;
     await sql`
       UPDATE public.breakdowns 
@@ -137,7 +148,7 @@ export const updateBreakdownFn = createServerFn({ method: "POST" })
 
 export const deleteBreakdownFn = createServerFn({ method: "POST" })
   .validator((id: string) => id)
-  .handler(async (id) => {
+  .handler(async ({ data: id }) => {
     await sql`DELETE FROM public.breakdowns WHERE id = ${id}`;
   });
 
@@ -150,7 +161,7 @@ export const saveUnitFn = createServerFn({ method: "POST" })
     mtbs_target_hours?: number;
     mttr_target_hours?: number;
   }) => u)
-  .handler(async (u) => {
+  .handler(async ({ data: u }) => {
     const notes = u.notes ?? null;
     const mtbs = u.mtbs_target_hours ?? 65;
     const mttr = u.mttr_target_hours ?? 10;
@@ -170,7 +181,7 @@ export const saveUnitFn = createServerFn({ method: "POST" })
 
 export const deleteUnitFn = createServerFn({ method: "POST" })
   .validator((id: string) => id)
-  .handler(async (id) => {
+  .handler(async ({ data: id }) => {
     await sql`DELETE FROM public.units WHERE id = ${id}`;
   });
 
@@ -180,7 +191,7 @@ export const saveTargetFn = createServerFn({ method: "POST" })
     mtbs_target_hours?: number;
     mttr_target_hours?: number;
   }) => input)
-  .handler(async (input) => {
+  .handler(async ({ data: input }) => {
     const pa = input.pa_target !== undefined ? input.pa_target : 0.9;
     const mtbs = input.mtbs_target_hours !== undefined ? input.mtbs_target_hours : 65;
     const mttr = input.mttr_target_hours !== undefined ? input.mttr_target_hours : 10;
@@ -189,9 +200,9 @@ export const saveTargetFn = createServerFn({ method: "POST" })
       INSERT INTO public.app_settings (id, pa_target, mtbs_target_hours, mttr_target_hours) 
       VALUES (1, ${pa}, ${mtbs}, ${mttr}) 
       ON CONFLICT (id) DO UPDATE SET 
-        pa_target = COALESCE(${input.pa_target !== undefined ? pa : null}, public.app_settings.pa_target),
-        mtbs_target_hours = COALESCE(${input.mtbs_target_hours !== undefined ? mtbs : null}, public.app_settings.mtbs_target_hours),
-        mttr_target_hours = COALESCE(${input.mttr_target_hours !== undefined ? mttr : null}, public.app_settings.mttr_target_hours)
+        pa_target = EXCLUDED.pa_target,
+        mtbs_target_hours = EXCLUDED.mtbs_target_hours,
+        mttr_target_hours = EXCLUDED.mttr_target_hours
     `;
   });
 
@@ -209,7 +220,7 @@ export const uploadExcelLogsFn = createServerFn({ method: "POST" })
     shift: string;
     logDate: string;
   }) => input)
-  .handler(async ({ startLocal, endLocal, recordsToInsert, fileName, shift, logDate }) => {
+  .handler(async ({ data: { startLocal, endLocal, recordsToInsert, fileName, shift, logDate } }) => {
     await sql.begin(async (tx) => {
       const existing = await tx`
         SELECT id FROM public.breakdowns 
