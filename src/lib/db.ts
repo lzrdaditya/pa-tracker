@@ -1,22 +1,9 @@
-import postgres from 'postgres';
+import { neon } from '@neondatabase/serverless';
 
-let sql: ReturnType<typeof postgres>;
+const connectionString = process.env.DATABASE_URL || '';
 
-if (typeof window === 'undefined') {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    console.warn("DATABASE_URL is not set");
-  }
-  sql = postgres(connectionString || '', {
-    ssl: { rejectUnauthorized: false },
-    max: 10,
-    idle_timeout: 20,
-    connect_timeout: 10,
-  });
-} else {
-  sql = (() => {
-    throw new Error("Database client cannot be used on the client side directly.");
-  }) as any;
+if (!connectionString) {
+  console.warn('DATABASE_URL is not set');
 }
 
-export { sql };
+export const sql = neon(connectionString);
