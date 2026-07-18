@@ -329,7 +329,7 @@ export function ExcelUploadDialog({ open, onOpenChange }: Props) {
                       );
                       return (
                         <div
-                          key={`${g.equipment}_${g.date}`}
+                          key={`${g.equipment}_${g.date}_${g.shift}_${g.startExec}_${g.unitClass}`}
                           className={`rounded-lg border p-4 flex items-center justify-between transition-colors ${
                             g.isBreakdown
                               ? "bg-red-950/20 border-red-900/50 hover:bg-red-950/30"
