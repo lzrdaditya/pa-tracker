@@ -136,14 +136,25 @@ export const updateBreakdownFn = createServerFn({ method: "POST" })
   }) => input)
   .handler(async ({ data: input }) => {
     const { id } = input;
-    await sql`
-      UPDATE public.breakdowns 
-      SET 
-        started_at = COALESCE(${input.started_at || null}, started_at),
-        finished_at = ${input.finished_at === undefined ? sql`finished_at` : (input.finished_at || null)},
-        notes = ${input.notes === undefined ? sql`notes` : (input.notes || null)}
-      WHERE id = ${id}
-    `;
+    const hasStarted = input.started_at !== undefined;
+    const hasFinished = 'finished_at' in input;
+    const hasNotes = 'notes' in input;
+
+    if (hasStarted && hasFinished && hasNotes) {
+      await sql`UPDATE public.breakdowns SET started_at = ${input.started_at!}, finished_at = ${input.finished_at ?? null}, notes = ${input.notes ?? null} WHERE id = ${id}`;
+    } else if (hasStarted && hasFinished) {
+      await sql`UPDATE public.breakdowns SET started_at = ${input.started_at!}, finished_at = ${input.finished_at ?? null} WHERE id = ${id}`;
+    } else if (hasStarted && hasNotes) {
+      await sql`UPDATE public.breakdowns SET started_at = ${input.started_at!}, notes = ${input.notes ?? null} WHERE id = ${id}`;
+    } else if (hasFinished && hasNotes) {
+      await sql`UPDATE public.breakdowns SET finished_at = ${input.finished_at ?? null}, notes = ${input.notes ?? null} WHERE id = ${id}`;
+    } else if (hasStarted) {
+      await sql`UPDATE public.breakdowns SET started_at = ${input.started_at!} WHERE id = ${id}`;
+    } else if (hasFinished) {
+      await sql`UPDATE public.breakdowns SET finished_at = ${input.finished_at ?? null} WHERE id = ${id}`;
+    } else if (hasNotes) {
+      await sql`UPDATE public.breakdowns SET notes = ${input.notes ?? null} WHERE id = ${id}`;
+    }
   });
 
 export const deleteBreakdownFn = createServerFn({ method: "POST" })
@@ -221,37 +232,47 @@ export const uploadExcelLogsFn = createServerFn({ method: "POST" })
     logDate: string;
   }) => input)
   .handler(async ({ data: { startLocal, endLocal, recordsToInsert, fileName, shift, logDate } }) => {
-    await sql.begin(async (tx) => {
-      const existing = await tx`
-        SELECT id FROM public.breakdowns 
-        WHERE started_at >= ${startLocal} 
-          AND started_at < ${endLocal} 
-          AND notes LIKE 'Excel Import%'
-      `;
+    // SELECT outside transaction to find IDs to delete
+    const existing = await sql`
+      SELECT id FROM public.breakdowns 
+      WHERE started_at >= ${startLocal} 
+        AND started_at < ${endLocal} 
+        AND notes LIKE 'Excel Import%'
+    `;
 
-      if (existing.length > 0) {
-        const ids = existing.map(x => x.id);
-        await tx`DELETE FROM public.breakdowns WHERE id IN ${tx(ids)}`;
-      }
+    // Build atomic write batch for sql.transaction()
+    // Each sql`` here returns a lazy pending query — executed together atomically
+    const statements: ReturnType<typeof sql>[] = [];
 
-      if (recordsToInsert.length > 0) {
-        await tx`
-          INSERT INTO public.breakdowns (unit_id, started_at, finished_at, notes) 
-          VALUES ${tx(recordsToInsert.map(r => [r.unit_id, r.started_at, r.finished_at, r.notes]))}
-        `;
-      }
+    if (existing.length > 0) {
+      const ids = existing.map((x) => x.id as string);
+      statements.push(
+        sql`DELETE FROM public.breakdowns WHERE id = ANY(${ids})`
+      );
+    }
 
+    for (const r of recordsToInsert) {
+      statements.push(
+        sql`INSERT INTO public.breakdowns (unit_id, started_at, finished_at, notes) VALUES (${r.unit_id}, ${r.started_at}, ${r.finished_at}, ${r.notes})`
+      );
+    }
+
+    statements.push(
+      sql`INSERT INTO public.excel_upload_log (file_name, shift, log_date, records_inserted) VALUES (${fileName}, ${shift}, ${logDate}, ${recordsToInsert.length}) ON CONFLICT DO NOTHING`
+    );
+
+    if (statements.length > 0) {
       try {
-        await tx`
-          INSERT INTO public.excel_upload_log (file_name, shift, log_date, records_inserted) 
-          VALUES (${fileName}, ${shift}, ${logDate}, ${recordsToInsert.length})
-        `;
+        await sql.transaction(statements);
       } catch (e) {
-        console.warn("Upload log table not available yet:", e);
+        console.warn('Transaction failed, retrying without log entry:', e);
+        // Retry without the log entry in case excel_upload_log table doesn't exist
+        const writeOnly = statements.slice(0, -1);
+        if (writeOnly.length > 0) await sql.transaction(writeOnly);
       }
-    });
+    }
 
-    return { deletedCount: 0, insertedCount: recordsToInsert.length };
+    return { deletedCount: existing.length, insertedCount: recordsToInsert.length };
   });
 
 // ----------------------------------------------------
