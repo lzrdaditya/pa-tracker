@@ -1,0 +1,239 @@
+import * as XLSX from "xlsx";
+import { Unit } from "./data";
+
+export interface ZrppRow {
+  date: Date;
+  shift: "DS" | "NS";
+  startExec: Date;
+  finishExec: Date;
+  equipment: string;
+  statusCode: string;
+  activityHours: number;
+  remarks: string | null;
+  cancelled: boolean;
+}
+
+export interface ParsedUpload {
+  downtimeRows: ZrppRow[];
+  snjRows: ZrppRow[];
+  unknownEquipment: string[];
+  logDate: string; // YYYY-MM-DD
+  shift: "DS" | "NS";
+}
+
+export interface SnjGroup {
+  equipment: string;
+  unitId: string | null;
+  unitCode: string;
+  unitName: string;
+  unitClass: string;
+  date: string; // YYYY-MM-DD
+  shift: "DS" | "NS";
+  totalHours: number;
+  startExec: string; // ISO string
+  finishExec: string; // ISO string
+  isBreakdown: boolean;
+}
+
+function normalizeKey(key: string): string {
+  return key
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, ""); // e.g. "Start Exec." -> "startexec", "Status Code for OPSDB" -> "statuscodeforopsdb"
+}
+
+function parseTime(val: any): { hours: number; minutes: number; seconds: number } {
+  if (val instanceof Date) {
+    return {
+      hours: val.getHours(),
+      minutes: val.getMinutes(),
+      seconds: val.getSeconds(),
+    };
+  }
+  if (typeof val === "number") {
+    const totalSeconds = Math.round(val * 24 * 3600);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return { hours, minutes, seconds };
+  }
+  if (typeof val === "string") {
+    const cleaned = val.trim();
+    // 12-hour or 24-hour match
+    const match = cleaned.match(/^(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?$/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const seconds = match[3] ? parseInt(match[3], 10) : 0;
+      const ampm = match[4]?.toUpperCase();
+      if (ampm === "PM" && hours < 12) hours += 12;
+      if (ampm === "AM" && hours === 12) hours = 0;
+      return { hours, minutes, seconds };
+    }
+    const d = new Date(`1970-01-01T${cleaned}`);
+    if (!isNaN(d.getTime())) {
+      return { hours: d.getHours(), minutes: d.getMinutes(), seconds: d.getSeconds() };
+    }
+  }
+  return { hours: 0, minutes: 0, seconds: 0 };
+}
+
+function parseDate(val: any): Date {
+  if (val instanceof Date) return val;
+  if (typeof val === "number") {
+    const date = new Date(1899, 11, 30);
+    date.setDate(date.getDate() + Math.floor(val));
+    return date;
+  }
+  if (typeof val === "string") {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date();
+}
+
+export function combineDateAndTime(dateVal: any, timeVal: any, shift: "DS" | "NS"): Date {
+  const baseDate = parseDate(dateVal);
+  const timeInfo = parseTime(timeVal);
+
+  let year = baseDate.getFullYear();
+  let month = baseDate.getMonth();
+  let day = baseDate.getDate();
+
+  // If Night Shift and hours are AM (< 12), it crosses midnight to the next day
+  if (shift === "NS" && timeInfo.hours < 12) {
+    const nextDay = new Date(year, month, day + 1);
+    year = nextDay.getFullYear();
+    month = nextDay.getMonth();
+    day = nextDay.getDate();
+  }
+
+  return new Date(year, month, day, timeInfo.hours, timeInfo.minutes, timeInfo.seconds);
+}
+
+export async function parseZrppExcel(file: File, units: Unit[]): Promise<ParsedUpload> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array", cellDates: true });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const json = XLSX.utils.sheet_to_json<any>(worksheet, { raw: true });
+
+        const downtimeRows: ZrppRow[] = [];
+        const snjRows: ZrppRow[] = [];
+        const unknownEquipmentSet = new Set<string>();
+
+        let detectedDateStr = "";
+        let detectedShift: "DS" | "NS" = "DS";
+
+        for (const rawRow of json) {
+          // Normalize row keys
+          const row: Record<string, any> = {};
+          for (const key of Object.keys(rawRow)) {
+            row[normalizeKey(key)] = rawRow[key];
+          }
+
+          // Parse cancelled indicator
+          const cancelled = !!(row.cancelled === 1 || row.cancelled === "1" || String(row.cancelled).toLowerCase() === "true" || row.cancelled === "yes");
+          if (cancelled) continue;
+
+          // Equipment/Unit Code matching
+          const equipment = String(row.equipment || "").trim();
+          if (!equipment) continue;
+
+          const matchedUnit = units.find((u) => u.code.toLowerCase() === equipment.toLowerCase());
+          if (!matchedUnit) {
+            unknownEquipmentSet.add(equipment);
+          }
+
+          const shift = String(row.shift || "").trim().toUpperCase() === "NS" ? "NS" : "DS";
+          const rawDate = row.date;
+          const parsedBaseDate = parseDate(rawDate);
+          const dateStr = `${parsedBaseDate.getFullYear()}-${String(parsedBaseDate.getMonth() + 1).padStart(2, "0")}-${String(parsedBaseDate.getDate()).padStart(2, "0")}`;
+
+          if (!detectedDateStr) {
+            detectedDateStr = dateStr;
+            detectedShift = shift;
+          }
+
+          const startExec = combineDateAndTime(rawDate, row.startexec, shift);
+          const finishExec = combineDateAndTime(rawDate, row.finishexec, shift);
+          const statusCode = String(row.statuscodeforopsdb || row.status || "").trim().toUpperCase();
+          const activityHours = parseFloat(row.activityhours || 0);
+          const remarks = row.remarks ? String(row.remarks).trim() : null;
+
+          const zRow: ZrppRow = {
+            date: parsedBaseDate,
+            shift,
+            startExec,
+            finishExec,
+            equipment,
+            statusCode,
+            activityHours,
+            remarks,
+            cancelled: false,
+          };
+
+          if (statusCode === "BPM" || statusCode === "BBR") {
+            downtimeRows.push(zRow);
+          } else if (statusCode === "SNJ") {
+            snjRows.push(zRow);
+          }
+        }
+
+        resolve({
+          downtimeRows,
+          snjRows,
+          unknownEquipment: Array.from(unknownEquipmentSet),
+          logDate: detectedDateStr || new Date().toISOString().slice(0, 10),
+          shift: detectedShift,
+        });
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+export function aggregateSnjGroups(snjRows: ZrppRow[], units: Unit[]): SnjGroup[] {
+  const groups: Record<string, ZrppRow[]> = {};
+
+  for (const row of snjRows) {
+    const baseDate = row.date;
+    const dateStr = `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, "0")}-${String(baseDate.getDate()).padStart(2, "0")}`;
+    const key = `${row.equipment.toLowerCase()}_${dateStr}_${row.shift}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(row);
+  }
+
+  return Object.values(groups).map((rows) => {
+    const first = rows[0];
+    const baseDate = first.date;
+    const dateStr = `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, "0")}-${String(baseDate.getDate()).padStart(2, "0")}`;
+    const matchedUnit = units.find((u) => u.code.toLowerCase() === first.equipment.toLowerCase());
+
+    // Sort by start time to find earliest and latest bounds
+    const sorted = [...rows].sort((a, b) => a.startExec.getTime() - b.startExec.getTime());
+    const startExec = sorted[0].startExec.toISOString();
+    const finishExec = sorted[sorted.length - 1].finishExec.toISOString();
+    const totalHours = rows.reduce((sum, r) => sum + r.activityHours, 0);
+
+    return {
+      equipment: first.equipment,
+      unitId: matchedUnit?.id || null,
+      unitCode: matchedUnit?.code || first.equipment,
+      unitName: matchedUnit?.name || "Unknown Unit",
+      unitClass: matchedUnit?.notes || "Unassigned",
+      date: dateStr,
+      shift: first.shift,
+      totalHours,
+      startExec,
+      finishExec,
+      isBreakdown: false, // Default is not breakdown
+    };
+  });
+}
