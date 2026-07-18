@@ -227,7 +227,7 @@ export function aggregateSnjGroups(snjRows: ZrppRow[], units: Unit[]): SnjGroup[
       unitId: matchedUnit?.id || null,
       unitCode: matchedUnit?.code || first.equipment,
       unitName: matchedUnit?.name || "Unknown Unit",
-      unitClass: matchedUnit?.notes || "Unassigned",
+      unitClass: (matchedUnit?.notes ?? "").trim() || "Unassigned",
       date: dateStr,
       shift: first.shift,
       totalHours,

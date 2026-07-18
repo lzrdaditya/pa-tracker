@@ -113,11 +113,18 @@ function Dashboard() {
 
   const classes = useMemo(() => {
     const s = new Set<string>();
+    let hasUnassigned = false;
     for (const u of units) {
       const c = (u.notes ?? "").trim();
-      if (c) s.add(c);
+      if (c) {
+        s.add(c);
+      } else {
+        hasUnassigned = true;
+      }
     }
-    return Array.from(s).sort();
+    const arr = Array.from(s).sort();
+    if (hasUnassigned) arr.push("Unassigned");
+    return arr;
   }, [units]);
 
   const breakdownsByUnit = useMemo(() => {
@@ -191,7 +198,7 @@ function Dashboard() {
   const enriched = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return allEnriched
-      .filter((e) => (classFilter === "all" ? true : (e.unit.notes ?? "") === classFilter))
+      .filter((e) => (classFilter === "all" ? true : ((e.unit.notes ?? "").trim() || "Unassigned") === classFilter))
       .filter((e) => {
         if (statusFilter === "all") return true;
         if (statusFilter === "breakdown") return e.open !== null;
@@ -368,7 +375,7 @@ function Dashboard() {
               <SelectContent>
                 <SelectItem value="all">All classes ({units.length})</SelectItem>
                 {classes.map((c) => {
-                  const count = units.filter((u) => (u.notes ?? "") === c).length;
+                  const count = units.filter((u) => ((u.notes ?? "").trim() || "Unassigned") === c).length;
                   return (
                     <SelectItem key={c} value={c}>
                       {c} ({count})

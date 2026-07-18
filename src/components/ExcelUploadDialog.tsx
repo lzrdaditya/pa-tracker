@@ -59,11 +59,18 @@ export function ExcelUploadDialog({ open, onOpenChange }: Props) {
 
   const classes = useMemo(() => {
     const s = new Set<string>();
+    let hasUnassigned = false;
     for (const u of units) {
       const c = (u.notes ?? "").trim();
-      if (c) s.add(c);
+      if (c) {
+        s.add(c);
+      } else {
+        hasUnassigned = true;
+      }
     }
-    return Array.from(s).sort();
+    const arr = Array.from(s).sort();
+    if (hasUnassigned) arr.push("Unassigned");
+    return arr;
   }, [units]);
 
   const filteredSnjGroups = useMemo(() => {
