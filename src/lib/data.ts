@@ -296,7 +296,7 @@ export function useSettings() {
 export function useRangeBreakdowns(from: Date, to: Date) {
   return useQuery({
     queryKey: ["breakdowns", "range", from.toISOString(), to.toISOString()],
-    queryFn: () => getRangeBreakdownsFn({ from: from.toISOString(), to: to.toISOString() }),
+    queryFn: () => getRangeBreakdownsFn({ data: { from: from.toISOString(), to: to.toISOString() } }),
     refetchInterval: 60_000,
   });
 }
@@ -305,7 +305,7 @@ export function useMonthBreakdowns(anchor?: Date) {
   const { start, end } = monthBounds(anchor);
   return useQuery({
     queryKey: ["breakdowns", "month", start.toISOString()],
-    queryFn: () => getRangeBreakdownsFn({ from: start.toISOString(), to: end.toISOString() }),
+    queryFn: () => getRangeBreakdownsFn({ data: { from: start.toISOString(), to: end.toISOString() } }),
     refetchInterval: 60_000,
   });
 }
@@ -314,7 +314,7 @@ export function useUnitBreakdowns(unitId: string | null) {
   return useQuery({
     enabled: !!unitId,
     queryKey: ["breakdowns", "unit", unitId],
-    queryFn: () => getUnitBreakdownsFn(unitId!),
+    queryFn: () => getUnitBreakdownsFn({ data: unitId! }),
   });
 }
 
@@ -326,7 +326,7 @@ export function useCreateBreakdown() {
       started_at: string;
       finished_at?: string | null;
       notes?: string | null;
-    }) => createBreakdownFn(input),
+    }) => createBreakdownFn({ data: input }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["breakdowns"] }),
   });
 }
@@ -339,7 +339,7 @@ export function useUpdateBreakdown() {
       started_at?: string;
       finished_at?: string | null;
       notes?: string | null;
-    }) => updateBreakdownFn(input),
+    }) => updateBreakdownFn({ data: input }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["breakdowns"] }),
   });
 }
@@ -347,7 +347,7 @@ export function useUpdateBreakdown() {
 export function useDeleteBreakdown() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteBreakdownFn(id),
+    mutationFn: (id: string) => deleteBreakdownFn({ data: id }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["breakdowns"] }),
   });
 }
@@ -362,7 +362,7 @@ export function useSaveUnit() {
       notes?: string | null;
       mtbs_target_hours?: number;
       mttr_target_hours?: number;
-    }) => saveUnitFn(u),
+    }) => saveUnitFn({ data: u }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["units"] }),
   });
 }
@@ -370,7 +370,7 @@ export function useSaveUnit() {
 export function useDeleteUnit() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteUnitFn(id),
+    mutationFn: (id: string) => deleteUnitFn({ data: id }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["units"] });
       qc.invalidateQueries({ queryKey: ["breakdowns"] });
@@ -385,7 +385,7 @@ export function useSaveTarget() {
       pa_target?: number;
       mtbs_target_hours?: number;
       mttr_target_hours?: number;
-    }) => saveTargetFn(input),
+    }) => saveTargetFn({ data: input }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
   });
 }
@@ -405,7 +405,7 @@ export function useUploadExcelLogs() {
       fileName: string;
       shift: string;
       logDate: string;
-    }) => uploadExcelLogsFn(input),
+    }) => uploadExcelLogsFn({ data: input }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["breakdowns"] }),
   });
 }
