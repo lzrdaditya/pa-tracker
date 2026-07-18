@@ -19,9 +19,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { useUnits } from "@/lib/data";
+import { useUnits, useUploadExcelLogs } from "@/lib/data";
 import { parseZrppExcel, aggregateSnjGroups, SnjGroup, ZrppRow } from "@/lib/excel-parser";
-import { supabase } from "@/integrations/supabase/client";
 import {
   Upload,
   FileSpreadsheet,
@@ -44,6 +43,7 @@ type Step = "upload" | "review-snj" | "summary" | "processing";
 export function ExcelUploadDialog({ open, onOpenChange }: Props) {
   const { data: units = [] } = useUnits();
   const qc = useQueryClient();
+  const uploadMutation = useUploadExcelLogs();
 
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -152,23 +152,7 @@ export function ExcelUploadDialog({ open, onOpenChange }: Props) {
         endLocal = new Date(year, month - 1, day + 1, 6, 30, 0);
       }
 
-      // 1. Overwrite: Delete existing Excel-imported breakdowns in this range
-      const { data: existing, error: fetchErr } = await supabase
-        .from("breakdowns")
-        .select("id")
-        .gte("started_at", startLocal.toISOString())
-        .lt("started_at", endLocal.toISOString())
-        .like("notes", "Excel Import%");
-
-      if (fetchErr) throw fetchErr;
-
-      if (existing && existing.length > 0) {
-        const ids = existing.map((x) => x.id);
-        const { error: delErr } = await supabase.from("breakdowns").delete().in("id", ids);
-        if (delErr) throw delErr;
-      }
-
-      // 2. Prepare new records
+      // Prepare new records
       const recordsToInsert: any[] = [];
 
       // Add standard downtime (BPM, BBR)
@@ -195,29 +179,19 @@ export function ExcelUploadDialog({ open, onOpenChange }: Props) {
         });
       }
 
-      // 3. Write records
-      if (recordsToInsert.length > 0) {
-        const { error: insErr } = await supabase.from("breakdowns").insert(recordsToInsert);
-        if (insErr) throw insErr;
-      }
-
-      // 4. Write log (optional, do not block import if table not migrated yet)
-      try {
-        const { error: logErr } = await supabase.from("excel_upload_log").insert({
-          file_name: file?.name || "unknown",
-          shift,
-          log_date: logDate,
-          records_inserted: recordsToInsert.length,
-        });
-        if (logErr) console.warn("Upload audit log warning:", logErr);
-      } catch (e) {
-        console.warn("Upload log table not available yet:", e);
-      }
+      // Call the server function mutation
+      await uploadMutation.mutateAsync({
+        startLocal: startLocal.toISOString(),
+        endLocal: endLocal.toISOString(),
+        recordsToInsert,
+        fileName: file?.name || "unknown",
+        shift,
+        logDate,
+      });
 
       toast.success(
-        `Import completed! Overwrote ${existing?.length || 0} old records. Inserted ${recordsToInsert.length} new records.`
+        `Import completed! Successfully loaded ${recordsToInsert.length} records to database.`
       );
-      qc.invalidateQueries({ queryKey: ["breakdowns"] });
       onOpenChange(false);
       resetState();
     } catch (err: any) {
