@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -40,6 +40,7 @@ import { BreakdownDialog } from "@/components/BreakdownDialog";
 import { ManageUnitsDialog } from "@/components/ManageUnitsDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { HistoryDialog } from "@/components/HistoryDialog";
+import { ExcelUploadDialog } from "@/components/ExcelUploadDialog";
 import { toast } from "sonner";
 import {
   Activity,
@@ -59,6 +60,8 @@ import {
   PlusCircle,
   Timer,
   Gauge,
+  FileSpreadsheet,
+  MonitorPlay,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -105,6 +108,7 @@ function Dashboard() {
   const [manageOpen, setManageOpen] = useState(false);
   const [manageStartNew, setManageStartNew] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [q, setQ] = useState("");
 
   const classes = useMemo(() => {
@@ -181,6 +185,7 @@ function Dashboard() {
       return { unit: u, stats, level, open, stoppages, mtbs, mttr, remStop, remMttr, maxNext };
     });
   }, [units, downtimeByUnit, stoppageCountByUnit, target, openByUnit, from, to, clock]);
+
 
   // Filtered baseline for Fleet KPIs and Lists
   const enriched = useMemo(() => {
@@ -314,6 +319,23 @@ function Dashboard() {
             >
               <PlusCircle className="h-4 w-4 mr-1" /> Register unit
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setUploadOpen(true)}
+              className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-1" /> Upload log
+            </Button>
+            <Link to="/showcase">
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white"
+              >
+                <MonitorPlay className="h-4 w-4 mr-1" /> Showcase Mode
+              </Button>
+            </Link>
             <Button size="sm" onClick={() => openCreate(null)} className="shadow-md shadow-primary/20">
               <Plus className="h-4 w-4 mr-1" /> New breakdown
             </Button>
@@ -628,6 +650,7 @@ function Dashboard() {
         startInNew={manageStartNew}
       />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <ExcelUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
       <HistoryDialog
         open={!!historyUnit}
         onOpenChange={(v) => !v && setHistoryUnit(null)}
