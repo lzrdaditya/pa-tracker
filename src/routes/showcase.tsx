@@ -407,7 +407,7 @@ function ShowcaseView() {
                         </div>
                         <div className="text-sm text-slate-600">{e.unit.notes || "Unassigned"}</div>
                         <div className="text-xs text-slate-700">
-                          <span className="text-rose-600 font-bold uppercase">DOWN</span> for Immediacy {" "}
+                          <span className="text-rose-600 font-bold uppercase">DOWN</span> for {" "}
                           <span className="font-mono font-bold text-rose-600">{elapsed.toFixed(1)}h</span>
                           <span className="text-slate-400 ml-1.5 font-mono">since {formatDateTime(e.open!.started_at)}</span>
                         </div>
@@ -436,7 +436,7 @@ function ShowcaseView() {
                           <span>Operational · PA {formatPct(e.stats.paCurrent)}</span>
                         </div>
                         <div className="text-right">
-                          <p className={`font-mono text-sm font-bold ${isOverBudget ? "text-rose-600 animate-pulse" : "text-amber-600"}`}>
+                          <p className={`font-mono text-sm font-bold ${isOverBudget ? "text-rose-600 animate-pulse" : "text-amber-400"}`}>
                             {e.stats.remainingAllowedDowntime >= 0
                               ? `${formatHours(e.stats.remainingAllowedDowntime)} left`
                               : `${formatHours(Math.abs(e.stats.remainingAllowedDowntime))} over`}
@@ -483,10 +483,4 @@ function ShowcaseView() {
       </footer>
     </div>
   );
-}
-
-function hoursInMonth(startedAt: string, finishedAt: string | null, now: Date) {
-  const s = new Date(startedAt).getTime();
-  const e = (finishedAt ? new Date(finishedAt) : now).getTime();
-  return Math.max(0, (e - s) / 3600000);
 }
