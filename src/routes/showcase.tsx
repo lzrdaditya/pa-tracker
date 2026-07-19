@@ -11,7 +11,7 @@ import {
   formatHours,
   formatPct,
   paStatusLevel,
-  hoursInMonth,
+  hoursInMonth, // Imported correctly here
   elapsedHours,
   formatDateTime,
   computeMTBS,
@@ -83,7 +83,7 @@ function ShowcaseView() {
     return () => clearInterval(interval);
   }, [isPlaying]);
 
-  // Fixed auto scroll logic that calculates accurately with block visibility elements
+  // Fixed auto scroll logic
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -374,7 +374,7 @@ function ShowcaseView() {
         }`}>
           <div className="text-center mb-8">
             <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 flex items-center justify-center gap-2">
-              <AlertTriangle className="h-7 w-7 text-rose-500" /> Unit Breakdown & Remaining Downtime Allowed
+              <AlertTriangle className="h-7 w-7 text-rose-500" /> Unit Breakdown & Reliability Budgets
             </h2>
             <p className="text-slate-500 text-sm mt-1">
               Showing currently down units and operational units with critical remaining downtime allowed.
@@ -412,7 +412,7 @@ function ShowcaseView() {
                         </div>
                         <div className="text-sm text-slate-600">{e.unit.notes || "Unassigned"}</div>
                         <div className="text-xs text-slate-700">
-                          <span className="text-rose-600 font-bold uppercase">DOWN</span> for{" "}
+                          <span className="text-rose-600 font-bold uppercase">DOWN</span> for {" "}
                           <span className="font-mono font-bold text-rose-600">{elapsed.toFixed(1)}h</span>
                           <span className="text-slate-400 ml-1.5 font-mono">since {formatDateTime(e.open!.started_at)}</span>
                         </div>
@@ -488,10 +488,4 @@ function ShowcaseView() {
       </footer>
     </div>
   );
-}
-
-function hoursInMonth(startedAt: string, finishedAt: string | null, now: Date) {
-  const s = new Date(startedAt).getTime();
-  const e = (finishedAt ? new Date(finishedAt) : now).getTime();
-  return Math.max(0, (e - s) / 3600000);
 }
