@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useUnits,
-  useRangeBreakdowns, // Restored the correct range hook
+  useRangeBreakdowns,
   useSettings,
 } from "@/lib/data";
 import {
@@ -50,14 +50,13 @@ function ShowcaseView() {
     return () => clearInterval(t);
   }, []);
 
-  // Correctly re-compute current month boundaries for range fetching
   const y = clock.getFullYear();
   const m = clock.getMonth();
   const from = useMemo(() => new Date(y, m, 1, 0, 0, 0, 0), [y, m]);
   const to = useMemo(() => new Date(y, m + 1, 1, 0, 0, 0, 0), [y, m]);
 
   const anchor = clock;
-  const { data: breakdowns = [] } = useRangeBreakdowns(from, to); // Using the correct range data stream hook
+  const { data: breakdowns = [] } = useRangeBreakdowns(from, to);
 
   // Slide rotation controls
   const [activeSlide, setActiveSlide] = useState<Slide>("classes");
@@ -84,7 +83,7 @@ function ShowcaseView() {
     return () => clearInterval(interval);
   }, [isPlaying]);
 
-  // Auto scroll logic
+  // Fixed auto scroll logic that calculates accurately with block visibility elements
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -290,14 +289,14 @@ function ShowcaseView() {
         </div>
       </header>
 
-      {/* Main Slide Carousel Section with Smooth Fade Transitions */}
-      <main ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 py-4 scrollbar-none relative">
+      {/* Main Slide Carousel Section with Fixed Layout Constraints */}
+      <main ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 py-4 scrollbar-none">
         
         {/* SLIDE 1: CLASSES */}
         <div className={`transition-all duration-500 ease-in-out transform ${
           activeSlide === "classes" 
-            ? "opacity-100 translate-y-0 relative pointer-events-auto" 
-            : "opacity-0 translate-y-4 absolute top-0 left-0 w-full pointer-events-none"
+            ? "opacity-100 translate-y-0 block" 
+            : "opacity-0 translate-y-4 hidden"
         }`}>
           <div className="text-center mb-8">
             <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 flex items-center justify-center gap-2">
@@ -370,12 +369,12 @@ function ShowcaseView() {
         {/* SLIDE 2: BREAKDOWNS */}
         <div className={`transition-all duration-500 ease-in-out transform ${
           activeSlide === "breakdowns" 
-            ? "opacity-100 translate-y-0 relative pointer-events-auto" 
-            : "opacity-0 translate-y-4 absolute top-0 left-0 w-full pointer-events-none"
+            ? "opacity-100 translate-y-0 block" 
+            : "opacity-0 translate-y-4 hidden"
         }`}>
           <div className="text-center mb-8">
             <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 flex items-center justify-center gap-2">
-              <AlertTriangle className="h-7 w-7 text-rose-500" /> Unit Breakdown & Reliability Budgets
+              <AlertTriangle className="h-7 w-7 text-rose-500" /> Unit Breakdown & Remaining Downtime Allowed
             </h2>
             <p className="text-slate-500 text-sm mt-1">
               Showing currently down units and operational units with critical remaining downtime allowed.
@@ -413,7 +412,7 @@ function ShowcaseView() {
                         </div>
                         <div className="text-sm text-slate-600">{e.unit.notes || "Unassigned"}</div>
                         <div className="text-xs text-slate-700">
-                          <span className="text-rose-600 font-bold uppercase">DOWN</span> for {" "}
+                          <span className="text-rose-600 font-bold uppercase">DOWN</span> for{" "}
                           <span className="font-mono font-bold text-rose-600">{elapsed.toFixed(1)}h</span>
                           <span className="text-slate-400 ml-1.5 font-mono">since {formatDateTime(e.open!.started_at)}</span>
                         </div>
@@ -489,4 +488,10 @@ function ShowcaseView() {
       </footer>
     </div>
   );
+}
+
+function hoursInMonth(startedAt: string, finishedAt: string | null, now: Date) {
+  const s = new Date(startedAt).getTime();
+  const e = (finishedAt ? new Date(finishedAt) : now).getTime();
+  return Math.max(0, (e - s) / 3600000);
 }
