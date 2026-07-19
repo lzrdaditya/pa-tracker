@@ -5,7 +5,7 @@ export interface ZrppRow {
   date: Date;
   shift: "DS" | "NS";
   startExec: Date;
-  finishExec: Date | null; // Changed to allow null for ongoing real-time breakdown
+  finishExec: Date | null; // Nullable for real-time tracking
   equipment: string;
   statusCode: string;
   activityHours: number;
@@ -120,14 +120,14 @@ export async function parseZrppExcel(file: File, units: Unit[]): Promise<ParsedU
         const json = XLSX.utils.sheet_to_json<any>(worksheet, { raw: true });
 
         const snjRows: ZrppRow[] = [];
-        const allDowntimeRows: ZrppRow[] = [];
+        const rawDowntimeRows: ZrppRow[] = [];
         const unknownEquipmentSet = new Set<string>();
 
         let detectedDateStr = "";
         let detectedShift: "DS" | "NS" = "DS";
 
-        // Dictionary to store chronologically latest status row per equipment unit
-        const latestRowPerEquipment: Record<string, ZrppRow> = {};
+        // 1. First Pass: Collect everything and find the absolute latest log entry per unit code
+        const latestRowPerEquipment: Record<string, { time: number; statusCode: string; rowObj: any }> = {};
 
         for (const rawRow of json) {
           const row: Record<string, any> = {};
@@ -174,37 +174,50 @@ export async function parseZrppExcel(file: File, units: Unit[]): Promise<ParsedU
             cancelled: false,
           };
 
-          // Track rows separated into functional buckets
+          // Track into raw storage
           if (statusCode === "BPM" || statusCode === "BBR") {
-            allDowntimeRows.push(zRow);
+            rawDowntimeRows.push(zRow);
           } else if (statusCode === "SNJ") {
             snjRows.push(zRow);
           }
 
-          // Maintain tracking references to evaluate chronologically latest entry state
+          // Absolute tracking check across ALL records to see what the unit ended the shift doing
           const eqKey = equipment.toLowerCase();
-          if (!latestRowPerEquipment[eqKey] || startExec.getTime() > latestRowPerEquipment[eqKey].startExec.getTime()) {
-            latestRowPerEquipment[eqKey] = zRow;
+          const currentTime = startExec.getTime();
+          if (!latestRowPerEquipment[eqKey] || currentTime > latestRowPerEquipment[eqKey].time) {
+            latestRowPerEquipment[eqKey] = {
+              time: currentTime,
+              statusCode,
+              rowObj: zRow
+            };
           }
         }
 
-        // Finalize down row array map allocations
-        const downtimeRows = allDowntimeRows.map((row) => {
+        // 2. Second Pass: Filter and map downtimeRows cleanly
+        const downtimeRows: ZrppRow[] = [];
+
+        for (const row of rawDowntimeRows) {
           const eqKey = row.equipment.toLowerCase();
-          const latestState = latestRowPerEquipment[eqKey];
+          const finalState = latestRowPerEquipment[eqKey];
 
-          // Check if the overall latest record for this unit is down (BBR/BPM)
-          const isCurrentlyDown = latestState && (latestState.statusCode === "BBR" || latestState.statusCode === "BPM");
-          
-          // Check if THIS specific entry matches the latest entry timestamp to drop the end flag cleanly
-          const isLatestRecord = latestState && row.startExec.getTime() === latestState.startExec.getTime();
+          // Identify if this specific line matches the absolute last timestamp recorded for this unit
+          const isAbsoluteLastRow = finalState && row.startExec.getTime() === finalState.time;
+          const endedInDowntime = finalState && (finalState.statusCode === "BBR" || finalState.statusCode === "BPM");
 
-          return {
-            ...row,
-            // If it is the latest active row status update, clear finishExec out to drop the end window constraints
-            finishExec: (isCurrentlyDown && isLatestRecord) ? null : row.finishExec,
-          };
-        });
+          if (isAbsoluteLastRow && endedInDowntime) {
+            // This is the active, live ongoing event. Force finishExec to null to safely drain budget
+            downtimeRows.push({
+              ...row,
+              finishExec: null
+            });
+          } else {
+            // Otherwise, it's an old historical breakdown line that was fixed earlier in the shift.
+            // Only preserve it if it has an actual finish window
+            if (row.finishExec) {
+              downtimeRows.push(row);
+            }
+          }
+        }
 
         resolve({
           downtimeRows,
@@ -242,7 +255,6 @@ export function aggregateSnjGroups(snjRows: ZrppRow[], units: Unit[]): SnjGroup[
     const sorted = [...rows].sort((a, b) => a.startExec.getTime() - b.startExec.getTime());
     const startExec = sorted[0].startExec.toISOString();
     
-    // Fallback safe conversion if finishExec holds an absolute null parameter allocation
     const finishExec = sorted[sorted.length - 1].finishExec 
       ? sorted[sorted.length - 1].finishExec!.toISOString() 
       : new Date().toISOString();
