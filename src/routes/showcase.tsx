@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useUnits,
-  useBreakdowns, 
+  useRangeBreakdowns, // Restored the correct range hook
   useSettings,
 } from "@/lib/data";
 import {
@@ -50,8 +50,14 @@ function ShowcaseView() {
     return () => clearInterval(t);
   }, []);
 
+  // Correctly re-compute current month boundaries for range fetching
+  const y = clock.getFullYear();
+  const m = clock.getMonth();
+  const from = useMemo(() => new Date(y, m, 1, 0, 0, 0, 0), [y, m]);
+  const to = useMemo(() => new Date(y, m + 1, 1, 0, 0, 0, 0), [y, m]);
+
   const anchor = clock;
-  const { data: breakdowns = [] } = useBreakdowns();
+  const { data: breakdowns = [] } = useRangeBreakdowns(from, to); // Using the correct range data stream hook
 
   // Slide rotation controls
   const [activeSlide, setActiveSlide] = useState<Slide>("classes");
@@ -436,7 +442,7 @@ function ShowcaseView() {
                           <span>Operational · PA {formatPct(e.stats.paCurrent)}</span>
                         </div>
                         <div className="text-right">
-                          <p className={`font-mono text-sm font-bold ${isOverBudget ? "text-rose-600 animate-pulse" : "text-amber-400"}`}>
+                          <p className={`font-mono text-sm font-bold ${isOverBudget ? "text-rose-600 animate-pulse" : "text-amber-600"}`}>
                             {e.stats.remainingAllowedDowntime >= 0
                               ? `${formatHours(e.stats.remainingAllowedDowntime)} left`
                               : `${formatHours(Math.abs(e.stats.remainingAllowedDowntime))} over`}
