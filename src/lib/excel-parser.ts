@@ -5,7 +5,7 @@ export interface ZrppRow {
   date: Date;
   shift: "DS" | "NS";
   startExec: Date;
-  finishExec: Date;
+  finishExec: Date | null; // Changed to allow null for ongoing real-time breakdown
   equipment: string;
   statusCode: string;
   activityHours: number;
@@ -38,7 +38,7 @@ export interface SnjGroup {
 function normalizeKey(key: string): string {
   return key
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, ""); // e.g. "Start Exec." -> "startexec", "Status Code for OPSDB" -> "statuscodeforopsdb"
+    .replace(/[^a-z0-9]/g, "");
 }
 
 function parseTime(val: any): { hours: number; minutes: number; seconds: number } {
@@ -58,7 +58,6 @@ function parseTime(val: any): { hours: number; minutes: number; seconds: number 
   }
   if (typeof val === "string") {
     const cleaned = val.trim();
-    // 12-hour or 24-hour match
     const match = cleaned.match(/^(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?$/i);
     if (match) {
       let hours = parseInt(match[1], 10);
@@ -99,7 +98,6 @@ export function combineDateAndTime(dateVal: any, timeVal: any, shift: "DS" | "NS
   let month = baseDate.getMonth();
   let day = baseDate.getDate();
 
-  // If Night Shift and hours are AM (< 12), it crosses midnight to the next day
   if (shift === "NS" && timeInfo.hours < 12) {
     const nextDay = new Date(year, month, day + 1);
     year = nextDay.getFullYear();
@@ -121,25 +119,25 @@ export async function parseZrppExcel(file: File, units: Unit[]): Promise<ParsedU
         const worksheet = workbook.Sheets[firstSheetName];
         const json = XLSX.utils.sheet_to_json<any>(worksheet, { raw: true });
 
-        const downtimeRows: ZrppRow[] = [];
         const snjRows: ZrppRow[] = [];
+        const allDowntimeRows: ZrppRow[] = [];
         const unknownEquipmentSet = new Set<string>();
 
         let detectedDateStr = "";
         let detectedShift: "DS" | "NS" = "DS";
 
+        // Dictionary to store chronologically latest status row per equipment unit
+        const latestRowPerEquipment: Record<string, ZrppRow> = {};
+
         for (const rawRow of json) {
-          // Normalize row keys
           const row: Record<string, any> = {};
           for (const key of Object.keys(rawRow)) {
             row[normalizeKey(key)] = rawRow[key];
           }
 
-          // Parse cancelled indicator
           const cancelled = !!(row.cancelled === 1 || row.cancelled === "1" || String(row.cancelled).toLowerCase() === "true" || row.cancelled === "yes");
           if (cancelled) continue;
 
-          // Equipment/Unit Code matching
           const equipment = String(row.equipment || "").trim();
           if (!equipment) continue;
 
@@ -176,12 +174,37 @@ export async function parseZrppExcel(file: File, units: Unit[]): Promise<ParsedU
             cancelled: false,
           };
 
+          // Track rows separated into functional buckets
           if (statusCode === "BPM" || statusCode === "BBR") {
-            downtimeRows.push(zRow);
+            allDowntimeRows.push(zRow);
           } else if (statusCode === "SNJ") {
             snjRows.push(zRow);
           }
+
+          // Maintain tracking references to evaluate chronologically latest entry state
+          const eqKey = equipment.toLowerCase();
+          if (!latestRowPerEquipment[eqKey] || startExec.getTime() > latestRowPerEquipment[eqKey].startExec.getTime()) {
+            latestRowPerEquipment[eqKey] = zRow;
+          }
         }
+
+        // Finalize down row array map allocations
+        const downtimeRows = allDowntimeRows.map((row) => {
+          const eqKey = row.equipment.toLowerCase();
+          const latestState = latestRowPerEquipment[eqKey];
+
+          // Check if the overall latest record for this unit is down (BBR/BPM)
+          const isCurrentlyDown = latestState && (latestState.statusCode === "BBR" || latestState.statusCode === "BPM");
+          
+          // Check if THIS specific entry matches the latest entry timestamp to drop the end flag cleanly
+          const isLatestRecord = latestState && row.startExec.getTime() === latestState.startExec.getTime();
+
+          return {
+            ...row,
+            // If it is the latest active row status update, clear finishExec out to drop the end window constraints
+            finishExec: (isCurrentlyDown && isLatestRecord) ? null : row.finishExec,
+          };
+        });
 
         resolve({
           downtimeRows,
@@ -216,10 +239,14 @@ export function aggregateSnjGroups(snjRows: ZrppRow[], units: Unit[]): SnjGroup[
     const dateStr = `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, "0")}-${String(baseDate.getDate()).padStart(2, "0")}`;
     const matchedUnit = units.find((u) => u.code.toLowerCase() === first.equipment.toLowerCase());
 
-    // Sort by start time to find earliest and latest bounds
     const sorted = [...rows].sort((a, b) => a.startExec.getTime() - b.startExec.getTime());
     const startExec = sorted[0].startExec.toISOString();
-    const finishExec = sorted[sorted.length - 1].finishExec.toISOString();
+    
+    // Fallback safe conversion if finishExec holds an absolute null parameter allocation
+    const finishExec = sorted[sorted.length - 1].finishExec 
+      ? sorted[sorted.length - 1].finishExec!.toISOString() 
+      : new Date().toISOString();
+      
     const totalHours = rows.reduce((sum, r) => sum + r.activityHours, 0);
 
     return {
@@ -233,7 +260,7 @@ export function aggregateSnjGroups(snjRows: ZrppRow[], units: Unit[]): SnjGroup[
       totalHours,
       startExec,
       finishExec,
-      isBreakdown: false, // Default is not breakdown
+      isBreakdown: false,
     };
   });
 }
