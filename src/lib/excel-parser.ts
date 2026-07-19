@@ -5,7 +5,7 @@ export interface ZrppRow {
   date: Date;
   shift: "DS" | "NS";
   startExec: Date;
-  finishExec: Date | null; // Nullable for real-time tracking
+  finishExec: Date | null; // Nullable for live, continuous tracking
   equipment: string;
   statusCode: string;
   activityHours: number;
@@ -126,8 +126,9 @@ export async function parseZrppExcel(file: File, units: Unit[]): Promise<ParsedU
         let detectedDateStr = "";
         let detectedShift: "DS" | "NS" = "DS";
 
-        // 1. First Pass: Collect everything and find the absolute latest log entry per unit code
-        const latestRowPerEquipment: Record<string, { time: number; statusCode: string; rowObj: any }> = {};
+        // Group rows per unit to identify sequence flow
+        const equipmentTimeline: Record<string, ZrppRow[]> = {};
+        const absoluteLatestState: Record<string, { time: number; statusCode: string }> = {};
 
         for (const rawRow of json) {
           const row: Record<string, any> = {};
@@ -174,48 +175,69 @@ export async function parseZrppExcel(file: File, units: Unit[]): Promise<ParsedU
             cancelled: false,
           };
 
-          // Track into raw storage
-          if (statusCode === "BPM" || statusCode === "BBR") {
-            rawDowntimeRows.push(zRow);
-          } else if (statusCode === "SNJ") {
-            snjRows.push(zRow);
-          }
-
-          // Absolute tracking check across ALL records to see what the unit ended the shift doing
           const eqKey = equipment.toLowerCase();
-          const currentTime = startExec.getTime();
-          if (!latestRowPerEquipment[eqKey] || currentTime > latestRowPerEquipment[eqKey].time) {
-            latestRowPerEquipment[eqKey] = {
-              time: currentTime,
-              statusCode,
-              rowObj: zRow
-            };
+          if (!equipmentTimeline[eqKey]) equipmentTimeline[eqKey] = [];
+          equipmentTimeline[eqKey].push(zRow);
+
+          // Track the exact absolute final operation status code at the shift end
+          const startTimeMs = startExec.getTime();
+          if (!absoluteLatestState[eqKey] || startTimeMs > absoluteLatestState[eqKey].time) {
+            absoluteLatestState[eqKey] = { time: startTimeMs, statusCode };
           }
         }
 
-        // 2. Second Pass: Filter and map downtimeRows cleanly
         const downtimeRows: ZrppRow[] = [];
 
-        for (const row of rawDowntimeRows) {
-          const eqKey = row.equipment.toLowerCase();
-          const finalState = latestRowPerEquipment[eqKey];
+        // Group row chunks into structural continuous events instead of dumping raw lines
+        for (const [eqKey, rows] of Object.entries(equipmentTimeline)) {
+          // Sort chronologically
+          const sortedRows = rows.sort((a, b) => a.startExec.getTime() - b.startExec.getTime());
+          
+          let currentEvent: ZrppRow | null = null;
 
-          // Identify if this specific line matches the absolute last timestamp recorded for this unit
-          const isAbsoluteLastRow = finalState && row.startExec.getTime() === finalState.time;
-          const endedInDowntime = finalState && (finalState.statusCode === "BBR" || finalState.statusCode === "BPM");
+          for (const row of sortedRows) {
+            const isDowntimeStatus = row.statusCode === "BPM" || row.statusCode === "BBR";
 
-          if (isAbsoluteLastRow && endedInDowntime) {
-            // This is the active, live ongoing event. Force finishExec to null to safely drain budget
-            downtimeRows.push({
-              ...row,
-              finishExec: null
-            });
-          } else {
-            // Otherwise, it's an old historical breakdown line that was fixed earlier in the shift.
-            // Only preserve it if it has an actual finish window
-            if (row.finishExec) {
-              downtimeRows.push(row);
+            if (isDowntimeStatus) {
+              if (!currentEvent) {
+                // Initialize a new continuous breakdown block event track
+                currentEvent = { ...row };
+              } else {
+                // If it continues immediately, extend the boundary limit timestamp pointer forward
+                currentEvent.finishExec = row.finishExec;
+                currentEvent.activityHours += row.activityHours;
+                if (row.remarks) {
+                  currentEvent.remarks = currentEvent.remarks 
+                    ? `${currentEvent.remarks} | ${row.remarks}` 
+                    : row.remarks;
+                }
+              }
+            } else {
+              // If status shifts back to production (e.g. SNJ/OPS) close previous tracking event blocks safely
+              if (currentEvent) {
+                downtimeRows.push(currentEvent);
+                currentEvent = null;
+              }
             }
+          }
+
+          // Handle the final trailing segment boundary rule
+          if (currentEvent) {
+            const finalUnitState = absoluteLatestState[eqKey];
+            const endedInDowntime = finalUnitState && (finalUnitState.statusCode === "BBR" || finalUnitState.statusCode === "BPM");
+
+            if (endedInDowntime) {
+              // If the final status remains un-repaired at shift end, detach finish boundary constraints so it drains live budget
+              currentEvent.finishExec = null;
+            }
+            downtimeRows.push(currentEvent);
+          }
+        }
+
+        // Extract SNJ rows normally
+        for (const rows of Object.values(equipmentTimeline)) {
+          for (const r of rows) {
+            if (r.statusCode === "SNJ") snjRows.push(r);
           }
         }
 
