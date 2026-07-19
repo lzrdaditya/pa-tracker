@@ -170,7 +170,8 @@ export function ExcelUploadDialog({ open, onOpenChange }: Props) {
         recordsToInsert.push({
           unit_id: matched.id,
           started_at: row.startExec.toISOString(),
-          finished_at: row.finishExec.toISOString(),
+          // FIXED: Check if finishExec is null (real-time ongoing breakdown) before converting to ISO string
+          finished_at: row.finishExec ? row.finishExec.toISOString() : null,
           notes: `Excel Import - ${row.statusCode}`,
         });
       }
